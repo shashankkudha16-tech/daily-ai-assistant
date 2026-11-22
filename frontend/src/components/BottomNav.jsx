@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { HomeIcon, CompassIcon, BookIcon, BookmarkIcon, UserIcon } from './Icons.jsx';
+import { useAuth } from '../auth/AuthContext.jsx';
 
 const items = [
   { to: '/', label: 'Home', Icon: HomeIcon, end: true },
@@ -10,9 +11,11 @@ const items = [
 ];
 
 export default function BottomNav() {
+  const { user } = useAuth();
+  const visibleItems = user ? items : items.slice(0, 2);
   return (
     <nav className="bottom-nav" aria-label="Main navigation">
-      {items.map(({ to, label, Icon, end }) => (
+      {visibleItems.map(({ to, label, Icon, end }) => (
         <NavLink
           key={to}
           to={to}

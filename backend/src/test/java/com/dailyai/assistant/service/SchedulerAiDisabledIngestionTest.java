@@ -80,7 +80,7 @@ class SchedulerAiDisabledIngestionTest {
     @Test
     void refreshSavesBasicExplanationsWithoutCallingTheAiProvider() throws Exception {
         ParsedArticle candidate = new ParsedArticle("New model ships", "https://example.com/a",
-                "A feed description.", Instant.now(), "Test Feed", null);
+                "A feed description.", Instant.now(), "Test Feed", null, null);
 
         when(feedClient.fetch(anyString())).thenReturn("<rss/>".getBytes());
         when(parser.parse(any(byte[].class), anyString())).thenReturn(List.of(candidate));

@@ -7,10 +7,12 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [guestMigrationStatus, setGuestMigrationStatus] = useState(null);
 
   useEffect(() => {
     let active = true;
-    api.getMe()
+    api.establishGuestSession().catch(() => null)
+      .then(() => api.getMe())
       .then((current) => {
         if (active) setUser(current);
       })
@@ -32,15 +34,17 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(async (email, password) => {
-    const current = await api.login(email, password);
-    setUser(current);
-    return current;
+    const result = await api.login(email, password);
+    setGuestMigrationStatus(result.guestMigration);
+    setUser(result.user);
+    return result;
   }, []);
 
   const register = useCallback(async (payload) => {
-    const current = await api.register(payload);
-    setUser(current);
-    return current;
+    const result = await api.register(payload);
+    setGuestMigrationStatus(result.guestMigration);
+    setUser(result.user);
+    return result;
   }, []);
 
   const signOut = useCallback(async () => {
@@ -50,13 +54,14 @@ export function AuthProvider({ children }) {
       // An expired/invalid session has nothing left to invalidate.
     } finally {
       clearCsrfToken();
+      setGuestMigrationStatus(null);
       setUser(null);
     }
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, register, signOut }),
-    [user, loading, login, register, signOut],
+    () => ({ user, loading, guestMigrationStatus, login, register, signOut }),
+    [user, loading, guestMigrationStatus, login, register, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

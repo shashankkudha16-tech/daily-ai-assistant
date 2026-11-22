@@ -42,8 +42,8 @@ export default function RegisterPage() {
     setBusy(true);
     setError('');
     try {
-      await register({ name, email, password, confirmPassword });
-      navigate('/', { replace: true });
+      const result = await register({ name, email, password, confirmPassword });
+      navigate('/', { replace: true, state: { guestMigration: result.guestMigration } });
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {

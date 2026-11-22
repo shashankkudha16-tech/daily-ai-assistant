@@ -65,10 +65,13 @@ async function logout() {
 }
 
 try {
-  await check('unauthenticated visit redirects to login', async () => {
+  await check('unauthenticated visit opens guest news browsing', async () => {
     await page.goto(`${BASE}/#/`, { waitUntil: 'networkidle' });
+    await page.getByRole('heading', { name: 'Latest AI updates' }).waitFor();
+    await page.getByText(/Browsing as a guest/).waitFor();
+    assert((await page.locator('.bottom-nav .nav-item').count()) === 2, 'guest navigation should show public sections only');
+    await page.goto(`${BASE}/#/bookmarks`, { waitUntil: 'networkidle' });
     await page.waitForURL('**/#/login');
-    await page.getByRole('heading', { name: 'Welcome back' }).waitFor();
   });
 
   await check('unknown credentials show a generic error', async () => {

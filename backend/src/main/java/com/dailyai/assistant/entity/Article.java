@@ -29,6 +29,9 @@ public class Article {
     @Column(length = 200)
     private String source;
 
+    @Column(length = 300)
+    private String author;
+
     @Column(name = "published_at")
     private Instant publishedAt;
 
@@ -81,6 +84,9 @@ public class Article {
     public void setSource(String source) {
         this.source = source;
     }
+
+    public String getAuthor() { return author; }
+    public void setAuthor(String author) { this.author = author; }
 
     public Instant getPublishedAt() {
         return publishedAt;

@@ -84,6 +84,8 @@ public class SecurityConfig {
                         .requestMatchers("/", "/index.html", "/favicon.svg", "/assets/**").permitAll()
                         .requestMatchers("/error", "/api/auth/csrf", "/api/auth/login",
                                 "/api/auth/register", "/api/auth/logout",
+                                "/api/guest/session", "/api/guest/recommendations",
+                                "/api/guest/interactions", "/api/guest/search", "/api/guest/personalization",
                                 "/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/news/**", "/api/categories/**", "/api/tools/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
@@ -126,6 +128,7 @@ public class SecurityConfig {
         configuration.setAllowedHeaders(List.of("Accept", "Content-Type", "Authorization", "X-XSRF-TOKEN",
                 AdminKeyAuthenticationFilter.HEADER, SchedulerKeyAuthenticationFilter.HEADER));
         configuration.setAllowCredentials(true);
+        configuration.setExposedHeaders(List.of("X-Guest-Migration-Status"));
         configuration.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);

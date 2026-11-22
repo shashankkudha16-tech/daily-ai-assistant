@@ -21,9 +21,9 @@ export default function LoginPage() {
     setBusy(true);
     setError('');
     try {
-      await login(email, password);
+      const result = await login(email, password);
       const destination = location.state?.from?.pathname || '/';
-      navigate(destination, { replace: true });
+      navigate(destination, { replace: true, state: { guestMigration: result.guestMigration } });
     } catch (err) {
       setError(apiErrorMessage(err) || 'Could not sign in. Check your details and try again.');
     } finally {

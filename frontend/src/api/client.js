@@ -4,8 +4,8 @@ import { resolveApiBaseUrl } from './baseUrl';
 /**
  * Requests use relative /api paths by default.
  * - Development: Vite proxies /api to http://localhost:8080 (vite.config.js).
- * - Production: frontend/vercel.json rewrites /api/* to the Render service, so
- *   the browser stays same-origin and the session cookie stays first-party.
+ * - Production: the Railway frontend Nginx proxy forwards /api/* to the backend,
+ *   so the browser stays same-origin and the session cookie stays first-party.
  * A packaged Android build has no proxy, so VITE_API_BASE_URL must be provided
  * at build time (for example http://10.0.2.2:8080 or a public HTTPS URL).
  */

@@ -4,10 +4,18 @@ import com.dailyai.assistant.dto.RefreshResultDto;
 import com.dailyai.assistant.entity.Article;
 import com.dailyai.assistant.entity.DailyTask;
 import com.dailyai.assistant.entity.LearningTopic;
+import com.dailyai.assistant.entity.GuestTopicInterest;
+import com.dailyai.assistant.entity.User;
+import com.dailyai.assistant.entity.UserTopicInterest;
 import com.dailyai.assistant.repository.ArticleRepository;
 import com.dailyai.assistant.repository.DailyTaskRepository;
 import com.dailyai.assistant.repository.LearningTopicRepository;
+import com.dailyai.assistant.repository.GuestTopicInterestRepository;
+import com.dailyai.assistant.repository.GuestMigrationRepository;
+import com.dailyai.assistant.repository.UserRepository;
+import com.dailyai.assistant.repository.UserTopicInterestRepository;
 import com.dailyai.assistant.service.AdminService;
+import com.dailyai.assistant.service.GuestAccountMigrationService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,6 +60,11 @@ class AuthApiIntegrationTest {
     private LearningTopicRepository topicRepository;
     @Autowired
     private DailyTaskRepository dailyTaskRepository;
+    @Autowired private GuestTopicInterestRepository guestInterestRepository;
+    @Autowired private GuestMigrationRepository guestMigrationRepository;
+    @Autowired private UserRepository userRepository;
+    @Autowired private UserTopicInterestRepository userInterestRepository;
+    @Autowired private GuestAccountMigrationService guestAccountMigrationService;
 
     @MockBean
     private AdminService adminService;
@@ -94,6 +107,196 @@ class AuthApiIntegrationTest {
         mockMvc.perform(get("/api/learning/roadmap")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/dashboard")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/news/latest")).andExpect(status().isOk());
+    }
+
+    @Test
+    void guestCanReadArticleDetailsButNotAccountData() throws Exception {
+        mockMvc.perform(get("/api/news/{id}", article.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Shared public AI update"));
+        mockMvc.perform(get("/api/dashboard")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/profile")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void guestCookieIsPersistentAndSeparateBetweenVisitors() throws Exception {
+        String firstCookie = guestCookie(mockMvc.perform(get("/api/guest/session"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.guest").value(true))
+                .andReturn());
+        String secondCookie = guestCookie(mockMvc.perform(get("/api/guest/session"))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertThat(firstCookie).isNotEqualTo(secondCookie);
+
+        String[] nameAndValue = firstCookie.split("=", 2);
+        mockMvc.perform(get("/api/guest/session")
+                        .cookie(new jakarta.servlet.http.Cookie(nameAndValue[0], nameAndValue[1])))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString(firstCookie)));
+    }
+
+    @Test
+    void guestInteractionRequiresCsrfAndRecommendationsAreCookieIsolated() throws Exception {
+        String first = guestCookie(mockMvc.perform(get("/api/guest/session")).andReturn());
+        String second = guestCookie(mockMvc.perform(get("/api/guest/session")).andReturn());
+        String[] firstParts = first.split("=", 2);
+        String[] secondParts = second.split("=", 2);
+        var firstCookie = new jakarta.servlet.http.Cookie(firstParts[0], firstParts[1]);
+        var secondCookie = new jakarta.servlet.http.Cookie(secondParts[0], secondParts[1]);
+        String payload = "{\"articleId\":" + article.getId() + ",\"type\":\"OPEN\"}";
+
+        mockMvc.perform(post("/api/guest/interactions").cookie(firstCookie)
+                        .contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isForbidden());
+        Csrf firstCsrf = csrf(null);
+        mockMvc.perform(post("/api/guest/interactions").cookie(firstCookie).session(firstCsrf.session())
+                        .header("X-XSRF-TOKEN", firstCsrf.token())
+                        .contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isNoContent());
+
+        Csrf firstRead = csrf(firstCsrf.session());
+        MvcResult firstRecommendations = mockMvc.perform(post("/api/guest/recommendations")
+                        .cookie(firstCookie).session(firstRead.session())
+                        .header("X-XSRF-TOKEN", firstRead.token()))
+                .andExpect(status().isOk()).andReturn();
+        var firstIds = objectMapper.readTree(firstRecommendations.getResponse().getContentAsString())
+                .path("articles").findValuesAsText("id");
+        assertThat(firstIds).doesNotContain(String.valueOf(article.getId()));
+
+        Csrf secondCsrf = csrf(null);
+        MvcResult secondRecommendations = mockMvc.perform(post("/api/guest/recommendations")
+                        .cookie(secondCookie).session(secondCsrf.session())
+                        .header("X-XSRF-TOKEN", secondCsrf.token()))
+                .andExpect(status().isOk()).andReturn();
+        var secondIds = objectMapper.readTree(secondRecommendations.getResponse().getContentAsString())
+                .path("articles").findValuesAsText("id");
+        assertThat(secondIds).contains(String.valueOf(article.getId()));
+    }
+
+    @Test
+    void registrationMigratesStrongGuestInterestsAndRotatesIdentity() throws Exception {
+        String oldGuestCookie = guestCookie(mockMvc.perform(get("/api/guest/session")).andReturn());
+        String guestId = guestId(oldGuestCookie);
+        saveGuestInterest(guestId, "generative-ai", 1.4, Instant.now());
+        Csrf csrf = csrf(null);
+
+        MvcResult result = mockMvc.perform(post("/api/auth/register")
+                        .cookie(cookie(oldGuestCookie)).session(csrf.session()).header("X-XSRF-TOKEN", csrf.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerJson("Guest Member", "guest-migration@example.com", PASSWORD, PASSWORD)))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("X-Guest-Migration-Status", "MIGRATED"))
+                .andExpect(jsonPath("$.guestId").doesNotExist())
+                .andReturn();
+
+        User user = userRepository.findByEmail("guest-migration@example.com").orElseThrow();
+        assertThat(user.getPreferenceList()).contains("AI_ML", "GENERATIVE_AI");
+        assertThat(userInterestRepository.findByUserIdAndTopic(user.getId(), "generative-ai"))
+                .get().extracting(UserTopicInterest::getScore).isEqualTo(1.4);
+        assertThat(guestInterestRepository.findByGuestId(guestId)).isEmpty();
+        assertThat(guestMigrationRepository.findById(guestId)).isPresent();
+        String newGuestCookie = result.getResponse().getHeaders("Set-Cookie").stream()
+                .filter(value -> value.startsWith("DAILYAI_GUEST="))
+                .map(value -> value.substring(0, value.indexOf(';'))).findFirst().orElseThrow();
+        assertThat(newGuestCookie).isNotEqualTo(oldGuestCookie);
+    }
+
+    @Test
+    void loginMergesGuestDataWithExistingPreferencesAndIsIdempotent() throws Exception {
+        MockHttpSession session = register("Existing Member", "existing-guest@example.com");
+        User user = userRepository.findByEmail("existing-guest@example.com").orElseThrow();
+        user.setPreferences("DEVELOPER_TOOLS");
+        userRepository.save(user);
+
+        String guestCookie = guestCookie(mockMvc.perform(get("/api/guest/session")).andReturn());
+        String guestId = guestId(guestCookie);
+        saveGuestInterest(guestId, "generative-ai", 2.5, Instant.now().minus(2, java.time.temporal.ChronoUnit.DAYS));
+        Csrf csrf = csrf(session);
+        MvcResult response = mockMvc.perform(post("/api/auth/login").cookie(cookie(guestCookie)).session(csrf.session())
+                        .header("X-XSRF-TOKEN", csrf.token()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"existing-guest@example.com\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Guest-Migration-Status", "MIGRATED"))
+                .andReturn();
+
+        user = userRepository.findById(user.getId()).orElseThrow();
+        assertThat(user.getPreferenceList()).contains("DEVELOPER_TOOLS", "AI_ML", "GENERATIVE_AI");
+        double mergedScore = userInterestRepository.findByUserIdAndTopic(user.getId(), "generative-ai")
+                .orElseThrow().getScore();
+        assertThat(mergedScore).isBetween(2.0, 2.5);
+        double beforeRetry = userInterestRepository.findByUserIdAndTopic(user.getId(), "generative-ai")
+                .orElseThrow().getScore();
+        assertThat(guestAccountMigrationService.migrate(user.getId(), guestId))
+                .isEqualTo(GuestAccountMigrationService.Status.ALREADY_MIGRATED);
+        assertThat(userInterestRepository.findByUserIdAndTopic(user.getId(), "generative-ai")
+                .orElseThrow().getScore()).isEqualTo(beforeRetry);
+        assertThat(response.getResponse().getHeaders("Set-Cookie").stream()
+                .filter(value -> value.startsWith("DAILYAI_GUEST=")).findFirst()).isPresent();
+    }
+
+    @Test
+    void loginWithoutGuestDataSucceedsAndRegistrationRollsBackOnForeignReplay() throws Exception {
+        MockHttpSession session = register("No Guest Data", "no-guest-data@example.com");
+        String emptyGuestCookie = guestCookie(mockMvc.perform(get("/api/guest/session")).andReturn());
+        Csrf csrf = csrf(session);
+        mockMvc.perform(post("/api/auth/login").cookie(cookie(emptyGuestCookie)).session(csrf.session())
+                        .header("X-XSRF-TOKEN", csrf.token()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"no-guest-data@example.com\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk()).andExpect(header().string("X-Guest-Migration-Status", "NO_DATA"));
+
+        User owner = userRepository.findByEmail("no-guest-data@example.com").orElseThrow();
+        String replayCookie = guestCookie(mockMvc.perform(get("/api/guest/session")).andReturn());
+        String replayId = guestId(replayCookie);
+        saveGuestInterest(replayId, "generative-ai", 1.0, Instant.now());
+        guestAccountMigrationService.migrate(owner.getId(), replayId);
+
+        Csrf registrationCsrf = csrf(null);
+        mockMvc.perform(post("/api/auth/register").cookie(cookie(replayCookie)).session(registrationCsrf.session())
+                        .header("X-XSRF-TOKEN", registrationCsrf.token()).contentType(MediaType.APPLICATION_JSON)
+                        .content(registerJson("Replay Attempt", "replay-attempt@example.com", PASSWORD, PASSWORD)))
+                .andExpect(status().isUnauthorized());
+        assertThat(userRepository.existsByEmailIgnoreCase("replay-attempt@example.com")).isFalse();
+        assertThat(guestInterestRepository.findByGuestId(replayId)).isEmpty();
+    }
+
+    @Test
+    void migrationRejectsAnotherAccountAndRollsBackBeforeDeletingGuestData() {
+        User owner = userRepository.saveAndFlush(new User("Migration Owner", "migration-owner@example.com"));
+        User other = userRepository.saveAndFlush(new User("Other Owner", "other-owner@example.com"));
+        String guestId = java.util.UUID.randomUUID().toString();
+        saveGuestInterest(guestId, "machine-learning", 1.2, Instant.now());
+        guestAccountMigrationService.migrate(owner.getId(), guestId);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> guestAccountMigrationService.migrate(other.getId(), guestId))
+                .isInstanceOf(com.dailyai.assistant.exception.UnauthorizedException.class);
+        assertThat(guestMigrationRepository.findById(guestId)).get()
+                .extracting(value -> value.getUser().getId()).isEqualTo(owner.getId());
+        assertThat(userInterestRepository.findByUserId(other.getId())).isEmpty();
+    }
+
+    private void saveGuestInterest(String guestId, String topic, double score, Instant updatedAt) {
+        GuestTopicInterest interest = new GuestTopicInterest();
+        interest.setGuestId(guestId);
+        interest.setTopic(topic);
+        interest.setScore(score);
+        interest.setUpdatedAt(updatedAt);
+        guestInterestRepository.saveAndFlush(interest);
+    }
+
+    private String guestId(String cookie) {
+        return cookie.substring(cookie.indexOf('=') + 1);
+    }
+
+    private jakarta.servlet.http.Cookie cookie(String cookie) {
+        String[] parts = cookie.split("=", 2);
+        return new jakarta.servlet.http.Cookie(parts[0], parts[1]);
+    }
+
+    private String guestCookie(MvcResult result) {
+        String header = result.getResponse().getHeader("Set-Cookie");
+        assertThat(header).contains("DAILYAI_GUEST=", "HttpOnly", "Path=/", "Max-Age=31536000", "SameSite=Lax");
+        return header.substring(0, header.indexOf(';'));
     }
 
     @Test

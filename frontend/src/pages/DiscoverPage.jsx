@@ -5,6 +5,7 @@ import {
   getToolCategories,
   getTools,
   refreshNews,
+  recordGuestSearch,
   searchNews,
 } from '../api/api.js';
 import useAsync from '../hooks/useAsync.js';
@@ -15,7 +16,7 @@ import { RefreshIcon, SearchIcon } from '../components/Icons.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
 
 export default function DiscoverPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [tab, setTab] = useState('news');
   const [queryInput, setQueryInput] = useState('');
   const [query, setQuery] = useState('');
@@ -48,7 +49,9 @@ export default function DiscoverPage() {
   function submitSearch(event) {
     event.preventDefault();
     setPage(0);
-    setQuery(queryInput.trim());
+    const value = queryInput.trim();
+    setQuery(value);
+    if (!authLoading && !user && value) recordGuestSearch(value).catch(() => {});
   }
 
   function submitToolSearch(event) {

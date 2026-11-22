@@ -56,7 +56,11 @@ class ExplanationServiceTest {
         assertThat(explanation.getWhatHappened()).isEqualTo("A short feed description.");
         assertThat(explanation.getTechnology()).isEqualTo("Not available in the provided text.");
         assertThat(explanation.getHowItWorks()).isEqualTo("Not available in the provided text.");
-        assertThat(explanation.getWhoBenefits()).contains("does not identify a specific audience");
+        assertThat(explanation.getWhatHappened()).isEqualTo("A short feed description.");
+        assertThat(explanation.getImportance()).contains("follow changes in AI").doesNotContain("becoming useful");
+        assertThat(explanation.getPracticalExample()).isEqualTo("Not available in the provided text.");
+        assertThat(explanation.getFresherLearning()).startsWith("Key takeaway:");
+        assertThat(explanation.getWhoBenefits()).contains("does not name a specific audience");
         assertThat(service.isAiEnabled()).isFalse();
     }
 
@@ -172,7 +176,7 @@ class ExplanationServiceTest {
 
         ArticleExplanation explanation = service.createBasic(article);
 
-        assertThat(explanation.getWhatHappened()).contains("feed published this item without a description")
+        assertThat(explanation.getWhatHappened()).contains("feed has no summary")
                 .contains(article.getTitle());
         assertThat(explanation.getHowItWorks()).isEqualTo("Not available in the provided text.");
         assertThat(explanation.getGeneratedBy()).isEqualTo(ArticleExplanation.GeneratedBy.BASIC);
@@ -186,7 +190,19 @@ class ExplanationServiceTest {
 
         ArticleExplanation explanation = service.createBasic(article);
 
-        assertThat(explanation.getImportance()).contains("research result", "not proof", "study design and limitations");
+        assertThat(explanation.getImportance()).contains("research result", "does not show", "limits");
+    }
+
+    @Test
+    void basicFallbackTruncatesLongFeedTextWithoutAddingFacts() {
+        when(explanationRepository.findByArticleId(1L)).thenReturn(Optional.empty());
+        Article article = article();
+        article.setDescription("Fact. " + "ordinary source wording ".repeat(40));
+
+        ArticleExplanation explanation = service.createBasic(article);
+
+        assertThat(explanation.getWhatHappened()).hasSizeLessThanOrEqualTo(500).endsWith("…");
+        assertThat(explanation.getWhatHappened()).startsWith("Fact.");
     }
 
     private ExplanationDraft draft() {

@@ -10,6 +10,7 @@ public record ArticleDto(
         String url,
         String description,
         String source,
+        String author,
         Instant publishedAt,
         String category,
         String categoryName,
@@ -24,6 +25,7 @@ public record ArticleDto(
                 article.getUrl(),
                 article.getDescription(),
                 article.getSource(),
+                displayAuthor(article.getAuthor()),
                 article.getPublishedAt(),
                 article.getCategory() == null ? null : article.getCategory().getSlug(),
                 article.getCategory() == null ? null : article.getCategory().getName(),
@@ -31,5 +33,9 @@ public record ArticleDto(
                 bookmarked,
                 usefulness
         );
+    }
+
+    private static String displayAuthor(String author) {
+        return author == null || author.isBlank() ? "Author unavailable" : author;
     }
 }

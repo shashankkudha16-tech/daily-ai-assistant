@@ -66,19 +66,44 @@ public class RssParser {
                 published = entry.getUpdatedDate().toInstant();
             }
 
-            String source = feedTitle;
-            if (entry.getAuthor() != null && !entry.getAuthor().isBlank()) {
-                source = feedTitle + " / " + entry.getAuthor().trim();
-            }
+            String author = extractAuthor(entry);
 
             String image = findImage(entry);
             ParsedArticle article = new ParsedArticle(title.trim(), link, description, published,
-                    TextUtils.truncate(source, 200), image);
+                    TextUtils.truncate(feedTitle, 200), TextUtils.truncate(author, 300), image);
             byUrl.putIfAbsent(link, article);
         }
 
         log.debug("Parsed {} unique entries from feed {}", byUrl.size(), feedTitle);
         return new ArrayList<>(byUrl.values());
+    }
+
+    private String extractAuthor(SyndEntry entry) {
+        if (entry.getAuthors() != null) {
+            for (var person : entry.getAuthors()) {
+                String name = person == null ? null : person.getName();
+                if (name != null && !name.isBlank()) return name.trim();
+            }
+        }
+        if (entry.getAuthor() != null && !entry.getAuthor().isBlank()) return entry.getAuthor().trim();
+
+        List<Element> foreign = entry.getForeignMarkup();
+        if (foreign != null) {
+            for (Element element : foreign) {
+                String localName = element.getName();
+                String namespace = element.getNamespaceURI();
+                boolean creator = "creator".equalsIgnoreCase(localName)
+                        && (namespace == null || namespace.isBlank()
+                        || namespace.toLowerCase().contains("dc/"));
+                boolean credit = "credit".equalsIgnoreCase(localName)
+                        && namespace != null && namespace.toLowerCase().contains("search.yahoo.com/mrss");
+                if (creator || credit) {
+                    String value = element.getTextTrim();
+                    if (!value.isBlank()) return value;
+                }
+            }
+        }
+        return null;
     }
 
     private String firstContent(SyndEntry entry) {

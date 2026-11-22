@@ -167,44 +167,26 @@ public class ExplanationService {
         String slug = article.getCategory() == null ? "latest-ai-news" : article.getCategory().getSlug();
         String description = article.getDescription();
 
-        explanation.setWhatHappened(description != null && !description.isBlank()
-                ? description
-                : "The feed published this item without a description. The title is: " + article.getTitle());
+        explanation.setWhatHappened(basicWhatHappened(description, article.getTitle()));
 
         explanation.setTechnology(UNKNOWN);
 
         explanation.setImportance("ai-research".equals(slug)
-                ? "The abstract reports a research result, not proof that the result is ready to use in a product. "
-                    + "Read the study design and limitations before applying it."
-                : "Tracking this helps you see how the AI industry is moving and which skills are becoming useful. "
-                    + "Read the original article before relying on any numbers or claims.");
+                ? "This is a reported research result. It does not show that the result is ready for use in a product. "
+                    + "Check how the study was done and what its limits are."
+                : "This news can help readers follow changes in AI. Check the original article before relying on its claims.");
 
         explanation.setHowItWorks(UNKNOWN);
 
         explanation.setWhereUsed(UNKNOWN);
 
-        explanation.setFresherLearning(switch (slug) {
-            case "generative-ai" -> "Learn how LLMs work, then practise prompt engineering and build one small "
-                    + "summarisation feature.";
-            case "ai-models" -> "Learn the difference between a base model and an instruction tuned model, and how "
-                    + "context windows and tokens affect cost.";
-            case "ai-agents" -> "Learn agents, tool calling and the plan act observe loop. Add step limits and logging "
-                    + "to every agent you build.";
-            case "deep-learning" -> "Learn neural networks and transformers before going deeper into this topic.";
-            case "machine-learning" -> "Learn supervised learning, train test splits and evaluation metrics.";
-            case "ai-research" -> "Read the abstract and conclusion first, then check the dataset and evaluation setup.";
-            case "ai-tools" -> "Try the tool on a small task and note what it does well and where it fails.";
-            case "ai-startups" -> "Follow the product, not just the funding. Ask what problem the product solves.";
-            case "tutorials" -> "Follow the tutorial, then rebuild the same thing without looking at the code.";
-            default -> "Open the original article and write a three line summary in your own words.";
-        });
+        explanation.setFresherLearning("Key takeaway: Read the original article to check its details.");
 
-        explanation.setPracticalExample("A safe next step is to open the original article, summarize its main claim, "
-                + "and check the source details before applying it. This is a reading exercise, not a claimed product use case.");
+        explanation.setPracticalExample(UNKNOWN);
 
         explanation.setRelatedTechnologies(UNKNOWN);
 
-        explanation.setWhoBenefits("Readers following this topic. The feed does not identify a specific audience.");
+        explanation.setWhoBenefits("People following this topic. The feed does not name a specific audience.");
 
         explanation.setUseCases("The feed does not establish a concrete use case. Read the original article before applying it.");
 
@@ -219,5 +201,16 @@ public class ExplanationService {
         explanation.setInputTokens(null);
         explanation.setOutputTokens(null);
         explanation.setLatencyMs(null);
+    }
+
+    private String basicWhatHappened(String description, String title) {
+        String text = description == null ? "" : description.trim();
+        if (text.isBlank()) {
+            return "The feed has no summary. The headline says: " + title;
+        }
+        // Feed descriptions can be long; keep fallback text short and avoid inventing a rewrite.
+        if (text.length() <= 500) return text;
+        int boundary = text.lastIndexOf(' ', 497);
+        return text.substring(0, boundary > 0 ? boundary : 497).stripTrailing() + "…";
     }
 }

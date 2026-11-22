@@ -38,14 +38,15 @@ class NewsControllerTest {
     @Test
     void latestReturnsArticleList() throws Exception {
         ArticleDto article = new ArticleDto(1L, "AI update", "https://example.com/1", "desc",
-                "Source", Instant.parse("2026-11-16T10:00:00Z"), "generative-ai",
+                "Source", "Jane Doe", Instant.parse("2026-11-16T10:00:00Z"), "generative-ai",
                 "Generative AI", null, false, null);
         when(articleService.latest(5)).thenReturn(List.of(article));
 
         mockMvc.perform(get("/api/news/latest"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].title").value("AI update"))
-                .andExpect(jsonPath("$[0].categoryName").value("Generative AI"));
+                .andExpect(jsonPath("$[0].categoryName").value("Generative AI"))
+                .andExpect(jsonPath("$[0].author").value("Jane Doe"));
     }
 
     @Test

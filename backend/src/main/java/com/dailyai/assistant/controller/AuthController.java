@@ -9,8 +9,10 @@ import com.dailyai.assistant.exception.UnauthorizedException;
 import com.dailyai.assistant.exception.ResourceNotFoundException;
 import com.dailyai.assistant.security.AppUserPrincipal;
 import com.dailyai.assistant.security.LoginAttemptService;
+import com.dailyai.assistant.security.GuestIdentity;
 import com.dailyai.assistant.service.AuthService;
 import com.dailyai.assistant.service.CurrentUserService;
+import com.dailyai.assistant.service.GuestAccountMigrationService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -51,6 +53,7 @@ public class AuthController {
     private final CurrentUserService currentUserService;
     private final AuthenticationManager authenticationManager;
     private final LoginAttemptService loginAttemptService;
+    private final GuestAccountMigrationService guestAccountMigrationService;
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
     private final boolean sessionCookieSecure;
     private final boolean registrationEnabled;
@@ -62,6 +65,7 @@ public class AuthController {
                           CurrentUserService currentUserService,
                           AuthenticationManager authenticationManager,
                           LoginAttemptService loginAttemptService,
+                          GuestAccountMigrationService guestAccountMigrationService,
                           SessionAuthenticationStrategy sessionAuthenticationStrategy,
                           @Value("${server.servlet.session.cookie.secure:false}") boolean sessionCookieSecure,
                           @Value("${app.auth.registration-enabled:true}") boolean registrationEnabled,
@@ -70,6 +74,7 @@ public class AuthController {
         this.currentUserService = currentUserService;
         this.authenticationManager = authenticationManager;
         this.loginAttemptService = loginAttemptService;
+        this.guestAccountMigrationService = guestAccountMigrationService;
         this.sessionAuthenticationStrategy = sessionAuthenticationStrategy;
         this.sessionCookieSecure = sessionCookieSecure;
         this.registrationEnabled = registrationEnabled;
@@ -89,18 +94,24 @@ public class AuthController {
         if (!registrationEnabled) {
             throw new ResourceNotFoundException("Registration is disabled.");
         }
-        User user = authService.register(request);
+        String guestId = GuestIdentity.findGuestId(httpRequest);
+        AuthService.RegistrationResult registration = authService.registerWithGuest(request, guestId);
+        User user = registration.user();
+        GuestAccountMigrationService.Status migrationStatus = registration.migrationStatus();
         AppUserPrincipal principal = new AppUserPrincipal(user);
         Authentication authentication = UsernamePasswordAuthenticationToken.authenticated(
                 principal, null, principal.getAuthorities());
         establishSession(authentication, httpRequest, httpResponse);
-        return ResponseEntity.status(HttpStatus.CREATED).body(authService.toDto(user));
+        rotateGuestCookieAfterSuccess(guestId, migrationStatus, httpRequest, httpResponse);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .header("X-Guest-Migration-Status", migrationStatus.name())
+                .body(authService.toDto(user));
     }
 
     @PostMapping("/login")
-    public AuthUserDto login(@Valid @RequestBody LoginRequest request,
-                             HttpServletRequest httpRequest,
-                             HttpServletResponse httpResponse) {
+    public ResponseEntity<AuthUserDto> login(@Valid @RequestBody LoginRequest request,
+                                             HttpServletRequest httpRequest,
+                                             HttpServletResponse httpResponse) {
         String email = AuthService.normalizeEmail(request.email());
         String clientAddress = httpRequest.getRemoteAddr();
         if (loginAttemptService.isBlocked(email, clientAddress)) {
@@ -118,9 +129,38 @@ public class AuthController {
             throw new UnauthorizedException("Invalid email or password");
         }
 
+        String guestId = GuestIdentity.findGuestId(httpRequest);
+        GuestAccountMigrationService.Status migrationStatus = GuestAccountMigrationService.Status.NO_GUEST;
+        if (guestId != null) {
+            AppUserPrincipal principal = (AppUserPrincipal) authentication.getPrincipal();
+            try {
+                migrationStatus = guestAccountMigrationService.migrate(principal.getId(), guestId);
+            } catch (RuntimeException ex) {
+                // Valid credentials still sign in if the optional guest merge is unavailable.
+                migrationStatus = GuestAccountMigrationService.Status.FAILED;
+            }
+        }
+
         loginAttemptService.reset(email, clientAddress);
         establishSession(authentication, httpRequest, httpResponse);
-        return authService.toDto(currentUserService.getCurrentUser());
+        rotateGuestCookieAfterSuccess(guestId, migrationStatus, httpRequest, httpResponse);
+        return ResponseEntity.ok()
+                .header("X-Guest-Migration-Status", migrationStatus.name())
+                .body(authService.toDto(currentUserService.getCurrentUser()));
+    }
+
+    private void rotateGuestCookieAfterSuccess(String guestId, GuestAccountMigrationService.Status status,
+                                               HttpServletRequest request, HttpServletResponse response) {
+        if (guestId == null || status == GuestAccountMigrationService.Status.FAILED) return;
+        ResponseCookie.ResponseCookieBuilder cookie = ResponseCookie.from(GuestSessionController.COOKIE_NAME,
+                        java.util.UUID.randomUUID().toString())
+                .path("/")
+                .httpOnly(true)
+                .secure(sessionCookieSecure || request.isSecure())
+                .maxAge(Duration.ofDays(365));
+        String sameSite = normalizeSameSite(sessionCookieSameSite);
+        if (sameSite != null) cookie.sameSite(sameSite);
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.build().toString());
     }
 
     @PostMapping("/logout")

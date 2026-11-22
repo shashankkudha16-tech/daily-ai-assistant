@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test:unit": "node --test test/*.test.js",
     "test:e2e": "node scripts/e2e-smoke.mjs",
+    "test:e2e:guest": "node scripts/phase6-guest-e2e.mjs",
     "test:auth": "node scripts/auth-e2e.mjs",
     "cap:sync": "npx cap sync android",
     "cap:open": "npx cap open android",

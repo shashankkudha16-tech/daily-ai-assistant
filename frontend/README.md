@@ -1,44 +1,43 @@
-# Frontend deployment (Vercel → Render)
+# Frontend deployment
 
-The SPA is a static Vite build. `frontend/vercel.json` rewrites `/api/*` to the
-Render backend so the browser only talks to the Vercel origin. That keeps the
-`DAILYAI_SESSION` cookie first-party (no third-party cookie blocking) and makes
-`SameSite=Lax; Secure` work as intended.
+## Railway Docker deployment
 
-## Before deploying
+The current Railway frontend configuration is `frontend/Dockerfile` plus
+`frontend/nginx.conf`. Nginx serves the Vite build on port 80 and proxies `/api/*`
+to `https://daily-ai-assistant-production.up.railway.app`. The backend hostname is
+hard-coded there; update it if the Railway backend service uses a different domain.
+Configure the Railway frontend service to expose container port 80. The backend
+Dockerfile reads Railway's `PORT` value and exposes `/actuator/health` for health checks.
 
-1. Replace the placeholder host in `frontend/vercel.json`:
+Keep `VITE_API_BASE_URL` unset for this deployment so browser requests use the
+same-origin Nginx proxy. Set the backend variables:
 
-   ```text
-   https://replace-with-render-service.onrender.com
-   ```
+- `AUTH_COOKIE_SECURE=true`
+- `AUTH_COOKIE_SAME_SITE=lax`
+- `CORS_ALLOWED_ORIGINS` including the exact Railway frontend origin (scheme and host)
+- `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` mapped to the Railway PostgreSQL service
 
-   with the real Render service URL. Do not add a trailing slash.
+Nginx forwards the browser `Origin` header, so the frontend origin must be in the
+backend CORS allowlist for credentialed API requests. The proxy sends the backend
+host and `X-Forwarded-Proto: https`; the guest cookie also becomes Secure on HTTPS
+requests. SameSite Lax is suitable because the browser talks only to the frontend
+origin. Spring Boot runs Flyway migrations at startup before Hibernate validates
+the resulting schema.
 
-2. In Vercel → Project → Settings:
-   - Root Directory: `frontend`
-   - Framework Preset: `Vite`
-   - Build Command: `npm run build`
-   - Output Directory: `dist`
-   - Install Command: `npm ci`
-   - Node.js Version: `22.x`
+Railway project settings are not checked into this repository: there is no
+`railway.toml` or `railway.json`. Configure the backend service root to `backend`
+and the frontend service root to `frontend`, each using its Dockerfile. Set the
+backend health check path to `/actuator/health` and the frontend target port to 80.
 
-3. Environment variables (Production and Preview):
+## Optional Vercel deployment
 
-   | Variable | Value |
-   | --- | --- |
-   | `VITE_API_BASE_URL` | Leave unset (or empty) so requests use relative `/api` paths through the rewrite. |
+`vercel.json` is a separate, optional deployment path. Its API rewrite currently
+contains a placeholder Render URL and must be replaced before using Vercel. This
+file is not used by the Railway Docker/Nginx deployment above. For Vercel, leave
+`VITE_API_BASE_URL` unset so requests go through that rewrite, and allow the Vercel
+origin in backend `CORS_ALLOWED_ORIGINS`.
 
-   Set `VITE_API_BASE_URL` only for builds that cannot use the rewrite (for
-   example a packaged Capacitor/Android build). Vite bakes the value in at build
-   time, so changing it requires a redeploy.
+## Client routes
 
-4. On Render, set `AUTH_COOKIE_SECURE=true` and `AUTH_COOKIE_SAME_SITE=lax`.
-   Because the API is proxied, requests are same-origin; keep the Vercel origin
-   in `CORS_ALLOWED_ORIGINS` only as a fallback in case the proxy does not
-   forward the original host.
-
-## Why there is no SPA fallback rewrite
-
-The app uses `HashRouter` (`src/main.jsx`), so client routes live after `#` and
-never require a server-side fallback to `index.html`.
+The app uses `HashRouter` (`src/main.jsx`), so client routes live after `#` and do
+not require an SPA fallback rewrite.

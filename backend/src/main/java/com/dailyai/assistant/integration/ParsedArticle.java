@@ -8,6 +8,7 @@ public record ParsedArticle(
         String description,
         Instant publishedAt,
         String source,
+        String author,
         String imageUrl
 ) {
 }

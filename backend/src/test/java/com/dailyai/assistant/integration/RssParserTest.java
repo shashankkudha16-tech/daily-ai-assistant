@@ -50,12 +50,33 @@ class RssParserTest {
         assertThat(first.url()).isEqualTo("https://example.com/posts/open-model?utm_source=rss");
         assertThat(first.description()).isEqualTo("A new open weight model was released.");
         assertThat(first.publishedAt()).isEqualTo(Instant.parse("2026-11-16T09:30:00Z"));
-        assertThat(first.source()).isEqualTo("Example AI Blog / Jane Doe");
+        assertThat(first.source()).isEqualTo("Example AI Blog");
+        assertThat(first.author()).isEqualTo("Jane Doe");
 
         ParsedArticle second = articles.get(1);
         assertThat(second.title()).isEqualTo("No date item");
         assertThat(second.publishedAt()).isNull();
         assertThat(second.source()).isEqualTo("Example AI Blog");
+        assertThat(second.author()).isNull();
+    }
+
+    @Test
+    void parsesAtomAuthorAndDublinCoreCreator() throws Exception {
+        String atom = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <feed xmlns="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">
+                  <title>Atom Publisher</title>
+                  <entry><title>Atom article</title><id>https://example.com/atom</id>
+                    <link href="https://example.com/atom"/><author><name>Alex Atom</name></author></entry>
+                  <entry><title>Metadata article</title><id>https://example.com/dc</id>
+                    <link href="https://example.com/dc"/><dc:creator>Casey Creator</dc:creator></entry>
+                </feed>
+                """;
+
+        List<ParsedArticle> articles = parser.parse(atom.getBytes(StandardCharsets.UTF_8), "fallback");
+
+        assertThat(articles).extracting(ParsedArticle::author).containsExactly("Alex Atom", "Casey Creator");
+        assertThat(articles).extracting(ParsedArticle::source).containsOnly("Atom Publisher");
     }
 
     @Test

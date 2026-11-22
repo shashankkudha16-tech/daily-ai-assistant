@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { addBookmark, removeBookmark } from '../api/api.js';
 import { BookmarkIcon } from './Icons.jsx';
+import { useAuth } from '../auth/AuthContext.jsx';
 
 export default function BookmarkToggle({ itemType, itemId, initial = false, onChange }) {
+  const { user } = useAuth();
   const [saved, setSaved] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -17,6 +19,11 @@ export default function BookmarkToggle({ itemType, itemId, initial = false, onCh
     if (busy) return;
     setBusy(true);
     setError('');
+    if (!user) {
+      setError('Log in to save articles');
+      setBusy(false);
+      return;
+    }
     const next = !saved;
     setSaved(next);
     try {

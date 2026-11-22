@@ -20,10 +20,13 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final GuestAccountMigrationService guestAccountMigrationService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder,
+                       GuestAccountMigrationService guestAccountMigrationService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.guestAccountMigrationService = guestAccountMigrationService;
     }
 
     @Transactional
@@ -48,6 +51,15 @@ public class AuthService {
             throw new ConflictException("An account with this email already exists");
         }
     }
+
+    @Transactional
+    public RegistrationResult registerWithGuest(RegisterRequest request, String guestId) {
+        User user = register(request);
+        GuestAccountMigrationService.Status status = guestAccountMigrationService.migrate(user.getId(), guestId);
+        return new RegistrationResult(user, status);
+    }
+
+    public record RegistrationResult(User user, GuestAccountMigrationService.Status migrationStatus) { }
 
     public AuthUserDto toDto(User user) {
         return new AuthUserDto(user.getId(), user.getName(), user.getEmail(), user.getRole().name());

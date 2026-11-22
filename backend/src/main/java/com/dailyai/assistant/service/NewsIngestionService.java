@@ -169,6 +169,7 @@ public class NewsIngestionService {
         article.setSource(candidate.source() == null || candidate.source().isBlank()
                 ? feed.getName()
                 : candidate.source());
+        article.setAuthor(candidate.author());
         article.setPublishedAt(candidate.publishedAt());
         article.setImageUrl(truncate(candidate.imageUrl(), 1000));
         article.setFetchedAt(Instant.now());

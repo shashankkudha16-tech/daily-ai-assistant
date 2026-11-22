@@ -353,6 +353,19 @@ class AiClientTest {
     }
 
     @Test
+    void requestPromptRequiresBeginnerFriendlyStructuredExplanation() {
+        responses.add(StubResponse.json(200, completion(validJson())));
+
+        AiClient client = new AiClient(properties, new ObjectMapper(), usageBudget,
+                new NarrativeFactualityValidator());
+        client.generateExplanation(article());
+
+        String request = requestBodies.get(requestBodies.size() - 1);
+        assertThat(request).contains("everyday words", "2-3 simple sentences", "Why does it matter?",
+                "Simple example", "Key takeaway", "Important terms");
+    }
+
+    @Test
     void researchDraftThatIsMostlyUnavailableIsRejected() {
         properties.getAi().setMaxAttempts(1);
         String unavailable = "Not available in the provided text.";

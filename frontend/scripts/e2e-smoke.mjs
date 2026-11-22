@@ -53,15 +53,17 @@ try {
   await page.goto(`${BASE}/#/`, { waitUntil: 'networkidle' });
 
   await check('authentication bootstrap for regression run', async () => {
-    if (!page.url().includes('#/login')) return;
     const email = process.env.E2E_EMAIL || `regression.${Date.now()}@example.com`;
     const password = process.env.E2E_PASSWORD || 'StrongPass1!';
     if (process.env.E2E_EMAIL) {
+      if (!page.url().includes('#/login')) {
+        await page.getByRole('link', { name: 'Log in' }).click();
+      }
       await page.locator('input[type="email"]').fill(email);
       await page.locator('input[autocomplete="current-password"]').fill(password);
       await page.getByRole('button', { name: 'Sign in' }).click();
     } else {
-      await page.getByRole('link', { name: 'Create an account' }).click();
+      if (!page.url().includes('#/register')) await page.getByRole('link', { name: 'Sign up' }).click();
       await page.locator('input[autocomplete="name"]').fill('E2E Regression');
       await page.locator('input[type="email"]').fill(email);
       const passwords = page.locator('input[autocomplete="new-password"]');

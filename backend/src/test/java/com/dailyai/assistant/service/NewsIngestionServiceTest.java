@@ -62,11 +62,11 @@ class NewsIngestionServiceTest {
     @Test
     void skipsDuplicateUrlsAndSavesOnlyNewArticles() throws Exception {
         ParsedArticle first = new ParsedArticle("First", "https://example.com/a", "desc",
-                Instant.now(), "Test Feed", null);
+                Instant.now(), "Test Feed", "Author One", null);
         ParsedArticle duplicate = new ParsedArticle("Duplicate", "https://example.com/a", "desc",
-                Instant.now(), "Test Feed", null);
+                Instant.now(), "Test Feed", "Author Two", null);
         ParsedArticle known = new ParsedArticle("Known", "https://example.com/known", "desc",
-                Instant.now(), "Test Feed", null);
+                Instant.now(), "Test Feed", null, null);
 
         when(feedClient.fetch(anyString())).thenReturn("<rss/>".getBytes());
         when(parser.parse(any(byte[].class), anyString())).thenReturn(List.of(first, duplicate, known));
@@ -84,6 +84,10 @@ class NewsIngestionServiceTest {
         assertThat(result.itemsRead()).isEqualTo(3);
         assertThat(result.feedsFailed()).isZero();
         assertThat(result.errors()).isEmpty();
+        org.mockito.ArgumentCaptor<Article> saved = org.mockito.ArgumentCaptor.forClass(Article.class);
+        org.mockito.Mockito.verify(articleRepository).save(saved.capture());
+        assertThat(saved.getValue().getSource()).isEqualTo("Test Feed");
+        assertThat(saved.getValue().getAuthor()).isEqualTo("Author One");
     }
 
     @Test
@@ -112,7 +116,7 @@ class NewsIngestionServiceTest {
     @Test
     void rejectsUnsafeArticleUrls() throws Exception {
         ParsedArticle invalid = new ParsedArticle("Bad", "javascript:alert(1)", null,
-                null, "Test Feed", null);
+                null, "Test Feed", null, null);
         when(feedClient.fetch(anyString())).thenReturn("<rss/>".getBytes());
         when(parser.parse(any(byte[].class), anyString())).thenReturn(List.of(invalid));
 

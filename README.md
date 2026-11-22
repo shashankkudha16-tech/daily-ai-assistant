@@ -144,8 +144,11 @@ docker compose up --build
 
 ## Authentication and multi-user isolation
 
-The app requires an account. Registration and login establish a server-side session in an
-HttpOnly cookie (`DAILYAI_SESSION`); no password or session token is stored in localStorage.
+Visitors can browse public news and article explanations without an account. A persistent,
+backend-managed HttpOnly `DAILYAI_GUEST` cookie scopes anonymous reading interests; it is
+rotated after those interests are offered to a newly registered or logged-in account.
+Registration and login establish a server-side session in an HttpOnly cookie
+(`DAILYAI_SESSION`); no password or session token is stored in localStorage.
 Passwords are hashed with BCrypt and are never returned by the API or written to logs. CSRF
 tokens are required for cookie-authenticated mutations, and login attempts are throttled.
 
@@ -371,10 +374,11 @@ Full request/response reference: [API_DOCUMENTATION.md](API_DOCUMENTATION.md).
 | Profile    | `GET/PUT /api/profile`, `GET /api/profile/history` |
 | Admin      | `POST /api/admin/news/refresh`, `POST /api/admin/articles/{id}/explain`, `GET /api/admin/status` |
 
-Public read-only endpoints: news, categories and AI tools. Registration, login, logout, CSRF
-and current-user endpoints live under `/api/auth`. Dashboard, profile, bookmarks and learning
-endpoints require a session and are always scoped to the authenticated owner. Admin endpoints
-require `ROLE_ADMIN` or a valid `X-Admin-Key` header.
+Public read-only endpoints: news, categories and AI tools. Cookie-scoped guest personalization
+endpoints live under `/api/guest`; they do not expose guest records by ID. Registration, login,
+logout, CSRF and current-user endpoints live under `/api/auth`. Dashboard, profile, bookmarks
+and learning endpoints require a session and are always scoped to the authenticated owner.
+Admin endpoints require `ROLE_ADMIN` or a valid `X-Admin-Key` header.
 
 ## Testing
 

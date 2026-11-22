@@ -32,9 +32,9 @@ spring:
       enabled: true
 
 server:
-  # Render injects PORT (default 10000); SERVER_PORT and 8080 keep local dev unchanged.
+  # Railway and other container hosts inject PORT; SERVER_PORT and 8080 keep local dev unchanged.
   port: ${PORT:${SERVER_PORT:8080}}
-  # Render terminates TLS and forwards X-Forwarded-*; framework mode makes the
+  # The TLS-terminating reverse proxy forwards X-Forwarded-*; framework mode makes the
   # request scheme, host and client address reflect the original request.
   forward-headers-strategy: framework
   shutdown: graceful

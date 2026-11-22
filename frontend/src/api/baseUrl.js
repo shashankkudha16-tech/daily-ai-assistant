@@ -5,8 +5,8 @@
  *   split-origin deployments need it because they have no dev proxy or rewrite.
  * - Otherwise the base URL is empty, so axios issues relative requests such as
  *   /api/news and the cookie stays on the page's own origin.
- *     - Development: Vite proxies /api to http://localhost:8080 (vite.config.js).
- *     - Production: frontend/vercel.json rewrites /api/* to the Render service.
+ * - Development: Vite proxies /api to http://localhost:8080 (vite.config.js).
+ * - Production: the Railway Nginx config proxies /api to the backend.
  * - Production never falls back to an absolute localhost URL.
  */
 export function resolveApiBaseUrl(configuredValue) {

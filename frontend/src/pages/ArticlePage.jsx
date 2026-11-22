@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { getArticle } from '../api/api.js';
+import { getArticle, recordGuestInteraction } from '../api/api.js';
 import useAsync from '../hooks/useAsync.js';
 import BookmarkToggle from '../components/BookmarkToggle.jsx';
 import { ErrorState, EmptyState, SkeletonList } from '../components/States.jsx';
 import { ArrowLeftIcon, ExternalIcon } from '../components/Icons.jsx';
 import { formatDateTime } from '../utils/format.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 
 const SECTIONS = [
   ['whatHappened', 'What happened?'],
@@ -47,7 +48,19 @@ function conciseExcerpt(value, isResearch = false) {
 
 export default function ArticlePage() {
   const { id } = useParams();
+  const { user, loading: authLoading } = useAuth();
   const { data: article, loading, error, reload } = useAsync(() => getArticle(id), [id]);
+
+  useEffect(() => {
+    if (!article?.id || authLoading || user) return undefined;
+    recordGuestInteraction(article.id, 'OPEN').catch(() => {});
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState === 'visible') {
+        recordGuestInteraction(article.id, 'QUALIFIED_VIEW').catch(() => {});
+      }
+    }, 25000);
+    return () => window.clearTimeout(timer);
+  }, [article?.id, authLoading, user]);
 
   if (loading) return <SkeletonList rows={5} />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
@@ -69,6 +82,8 @@ export default function ArticlePage() {
 
         <div className="detail-meta">
           <span>{article.source}</span>
+          <span aria-hidden="true">·</span>
+          <span>{article.author || 'Author unavailable'}</span>
           <span aria-hidden="true">·</span>
           <time dateTime={article.publishedAt || undefined}>{formatDateTime(article.publishedAt)}</time>
         </div>

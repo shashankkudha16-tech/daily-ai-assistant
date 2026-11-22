@@ -100,6 +100,10 @@ ul { margin: 0; }
   letter-spacing: 0.02em;
 }
 
+.auth-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.auth-actions a:not(.button) { color: var(--ink); font-size: 0.88rem; text-decoration: none; }
+.guest-notice { margin: 0 0 14px; color: var(--muted); font-size: 0.82rem; }
+
 .icon-button {
   display: grid;
   place-items: center;

@@ -33,20 +33,14 @@ export default function App() {
     <Routes>
       <Route path="login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
       <Route path="register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
-      <Route
-        element={(
-          <ProtectedRoute>
-            <Layout theme={theme} onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
-          </ProtectedRoute>
-        )}
-      >
+      <Route element={<Layout theme={theme} onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />}>
         <Route index element={<HomePage />} />
         <Route path="discover" element={<DiscoverPage />} />
         <Route path="news/:id" element={<ArticlePage />} />
-        <Route path="learn" element={<LearnPage />} />
-        <Route path="learn/:id" element={<TopicPage />} />
-        <Route path="bookmarks" element={<BookmarksPage />} />
-        <Route path="profile" element={<ProfilePage />} />
+        <Route path="learn" element={<ProtectedRoute><LearnPage /></ProtectedRoute>} />
+        <Route path="learn/:id" element={<ProtectedRoute><TopicPage /></ProtectedRoute>} />
+        <Route path="bookmarks" element={<ProtectedRoute><BookmarksPage /></ProtectedRoute>} />
+        <Route path="profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

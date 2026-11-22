@@ -34,6 +34,8 @@ export default function ArticleCard({ article, compact = false, showDescription 
       <div className="card-meta">
         <span>{article.source || hostOf(article.url)}</span>
         <span aria-hidden="true">·</span>
+        <span>{article.author || 'Author unavailable'}</span>
+        <span aria-hidden="true">·</span>
         <time dateTime={article.publishedAt || undefined}>{formatDate(article.publishedAt)}</time>
         <Link className="read-more" to={`/news/${article.id}`} aria-label={`Read ${article.title}`}>
           Read more

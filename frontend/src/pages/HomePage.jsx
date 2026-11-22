@@ -1,16 +1,26 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { completeDailyTask, getDashboard } from '../api/api.js';
+import { completeDailyTask, getDashboard, getLatestNews, getGuestRecommendations, resetGuestPersonalization } from '../api/api.js';
 import useAsync from '../hooks/useAsync.js';
 import ArticleCard from '../components/ArticleCard.jsx';
 import ToolCard from '../components/ToolCard.jsx';
 import { SkeletonList, ErrorState, SectionHeader, EmptyState } from '../components/States.jsx';
 import { CheckIcon, ChevronIcon } from '../components/Icons.jsx';
+import { useAuth } from '../auth/AuthContext.jsx';
+import { useCallback } from 'react';
 
 export default function HomePage() {
-  const { data, loading, error, reload, setData } = useAsync(getDashboard, []);
+  const { user } = useAuth();
+  const loadHome = useCallback(() => user
+    ? getDashboard()
+    : Promise.all([getLatestNews(12), getGuestRecommendations(12)]).then(([latestNews, recommendations]) => ({
+      guest: true, latestNews, recommendations, topUpdates: latestNews.slice(0, 5), trendingTools: [], recentModels: [],
+    })), [user]);
+  const { data, loading, error, reload, setData } = useAsync(loadHome, [loadHome]);
   const [taskBusy, setTaskBusy] = useState(false);
   const navigate = useNavigate();
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState('');
 
   async function toggleTodayTask(task) {
     if (!task || taskBusy) return;
@@ -38,6 +48,42 @@ export default function HomePage() {
 
   if (!data) {
     return <EmptyState title="No dashboard data" message="Try refreshing the page." />;
+  }
+
+  if (data.guest) {
+    async function resetInterests() {
+      setResetting(true);
+      setResetError('');
+      try { await resetGuestPersonalization(); reload(); }
+      catch { setResetError('Could not reset recommendations. Please try again.'); }
+      finally { setResetting(false); }
+    }
+    return (
+      <div className="stack">
+        <section className="hero">
+          <p className="eyebrow">Daily AI news</p>
+          <h1>Latest AI updates</h1>
+          <p className="hero-briefing">Browse recent stories from our configured news publishers. Create an account to save articles and track learning progress.</p>
+          <Link className="button" to="/discover">Discover all news</Link>
+        </section>
+        <section>
+          <SectionHeader title="Picked for you" subtitle={data.recommendations.message} />
+          {data.recommendations.personalized && <p className="muted small">Recommendations use topics from articles you open, spend time reading, and searches. Recent stories are also included for discovery.</p>}
+          <div className="stack tight">
+            {data.recommendations.articles.map((article) => <ArticleCard key={article.id} article={article} />)}
+          </div>
+          <button className="text-button" type="button" disabled={resetting} onClick={resetInterests}>
+            {resetting ? 'Resetting…' : 'Reset my recommendations'}
+          </button>
+          {resetError && <p className="muted small" role="alert">{resetError}</p>}
+        </section>
+        <section>
+          <SectionHeader title="Latest AI news" subtitle="Recent items collected from configured feeds" />
+          {data.latestNews.length ? <div className="stack tight">{data.latestNews.map((article) => <ArticleCard key={article.id} article={article} />)}</div>
+            : <EmptyState title="No news yet" message="New items appear after the next feed refresh." />}
+        </section>
+      </div>
+    );
   }
 
   const { stats, topUpdates, latestNews, trendingTools, recentModels, todayTask, continueLearning } = data;

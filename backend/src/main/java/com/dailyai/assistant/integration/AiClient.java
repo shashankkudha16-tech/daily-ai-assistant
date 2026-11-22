@@ -50,9 +50,16 @@ public class AiClient implements ExplanationProvider {
     private static final Logger log = LoggerFactory.getLogger(AiClient.class);
 
     private static final String SYSTEM_PROMPT = """
-            You are a careful analyst explaining an industry news item to a fresher developer.
+            You are a careful teacher explaining an industry news item to a beginner.
             Rules:
-            - Use simple English and short sentences.
+            - Use everyday words a beginner can understand. Keep sentences short and the full
+              explanation concise. Avoid jargon; when a technical term is needed, explain it
+              briefly in technology or technicalExplanation.
+            - whatHappened must be 2 or 3 simple sentences describing only the news.
+            - importance must briefly say why the news may matter, without overstating impact.
+            - practicalExample is optional: use it only when a simple example genuinely clarifies
+              the article. Otherwise write exactly "Not available in the provided text."
+            - technicalExplanation should briefly define difficult terms that appear in the source.
             - Only use the supplied article title and feed description as evidence.
             - Never invent product capabilities, release dates, pricing, benchmarks, API features,
               technical specifications or company announcements.
@@ -82,8 +89,15 @@ public class AiClient implements ExplanationProvider {
             """;
 
     private static final String RESEARCH_SYSTEM_PROMPT = """
-            You are explaining a research abstract to a fresher developer.
+            You are explaining a research abstract to a beginner in simple, everyday English.
             Rules:
+            - Keep sentences short and the full explanation concise. Explain any necessary
+              technical term in plain words.
+            - whatHappened must be 2 or 3 simple sentences stating the research question and
+              headline result, if both are reported.
+            - importance must briefly state why the reported result may matter.
+            - practicalExample is optional: use one only when it genuinely helps explain the
+              abstract; otherwise write exactly "Not available in the provided text."
             - Only use the supplied article title and abstract as evidence.
             - Treat the abstract as a report of a study, not as proof that a product exists or is ready.
             - whatHappened must state the research question and the headline result.
@@ -394,6 +408,15 @@ public class AiClient implements ExplanationProvider {
                 Original URL: %s
                 User request type: %s
                 Feed description: %s
+
+                Write the result for a beginner, not a specialist. Follow these sections:
+                What happened? (2-3 simple sentences in whatHappened)
+                Why does it matter? (briefly in importance)
+                Simple example (only when genuinely helpful; otherwise use the unavailable text)
+                Key takeaway (one short sentence in fresherLearning or technicalExplanation,
+                without adding a new fact)
+                Important terms (brief plain-English definitions in technology and
+                technicalExplanation; use the unavailable text when none are supported).
 
                 Figure out a neutral recommendation input for a general reader. Do not tailor the
                 explanation to a named person or to selected interests; the application computes
