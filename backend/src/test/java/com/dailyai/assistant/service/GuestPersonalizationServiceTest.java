@@ -1,6 +1,7 @@
 package com.dailyai.assistant.service;
 
 import com.dailyai.assistant.dto.GuestInteractionRequest;
+import com.dailyai.assistant.dto.GuestFeedbackRequest;
 import com.dailyai.assistant.entity.Article;
 import com.dailyai.assistant.entity.Category;
 import com.dailyai.assistant.entity.GuestArticleInteraction;
@@ -90,6 +91,66 @@ class GuestPersonalizationServiceTest {
 
         assertThat(recommendations.personalized()).isFalse();
         assertThat(recommendations.message()).contains("improve as you explore");
+    }
+
+    @Test
+    void notUsefulReducesTopicInterestButDoesNotExcludeArticle() {
+        Article article = saveArticle("Generative AI model update", generativeAi);
+        service.recordSearch(guestA, "generative AI");
+        var before = service.scoresForTesting(guestA);
+
+        service.recordFeedback(guestA, article.getId(), GuestFeedbackRequest.Action.NOT_USEFUL);
+
+        var after = service.scoresForTesting(guestA);
+        assertThat(after.get("generative-ai")).isLessThan(before.get("generative-ai"));
+        assertThat(service.feedback(guestA, article.getId())).isEqualTo("NOT_USEFUL");
+        assertThat(interactionRepository.findByGuestIdAndArticleId(guestA, article.getId()).orElseThrow().getUseful())
+                .isFalse();
+        assertThat(service.recommendations(guestA, 12).articles())
+                .extracting(value -> value.id()).contains(article.getId());
+    }
+
+    @Test
+    void usefulPersistsWithoutChangingScoresOrExcludingArticle() {
+        Article article = saveArticle("Generative AI model update", generativeAi);
+        service.recordSearch(guestA, "generative AI");
+        var before = service.scoresForTesting(guestA);
+
+        service.recordFeedback(guestA, article.getId(), GuestFeedbackRequest.Action.USEFUL);
+
+        assertThat(service.feedback(guestA, article.getId())).isEqualTo("USEFUL");
+        assertThat(service.scoresForTesting(guestA)).isEqualTo(before);
+        assertThat(service.recommendations(guestA, 12).articles()).extracting(value -> value.id()).contains(article.getId());
+    }
+
+    @Test
+    void showMeFewerExcludesOnlyThatArticleWithoutReducingTopicScores() {
+        Article selected = saveArticle("Generative AI model update", generativeAi);
+        Article similar = saveArticle("Generative AI model launch", generativeAi);
+        service.recordSearch(guestA, "generative AI");
+        var before = service.scoresForTesting(guestA);
+
+        service.recordFeedback(guestA, selected.getId(), GuestFeedbackRequest.Action.SHOW_ME_FEWER);
+
+        assertThat(service.feedback(guestA, selected.getId())).isEqualTo("SHOW_ME_FEWER");
+        assertThat(interactionRepository.findByGuestIdAndArticleId(guestA, selected.getId()).orElseThrow().getUseful())
+                .isNull();
+        assertThat(service.scoresForTesting(guestA)).isEqualTo(before);
+        var recommendations = service.recommendations(guestA, 12).articles().stream().map(value -> value.id()).toList();
+        assertThat(recommendations).doesNotContain(selected.getId()).contains(similar.getId());
+    }
+
+    @Test
+    void exploreLaterRemainsNeutralAndDoesNotExcludeArticle() {
+        Article article = saveArticle("Generative AI model update", generativeAi);
+        service.recordSearch(guestA, "generative AI");
+        var before = service.scoresForTesting(guestA);
+
+        service.recordFeedback(guestA, article.getId(), GuestFeedbackRequest.Action.EXPLORE_LATER);
+
+        assertThat(service.feedback(guestA, article.getId())).isEqualTo("EXPLORE_LATER");
+        assertThat(service.scoresForTesting(guestA)).isEqualTo(before);
+        assertThat(service.recommendations(guestA, 12).articles()).extracting(value -> value.id()).contains(article.getId());
     }
 
     @Test

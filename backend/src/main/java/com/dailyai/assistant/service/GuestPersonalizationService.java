@@ -2,6 +2,7 @@ package com.dailyai.assistant.service;
 
 import com.dailyai.assistant.dto.ArticleDto;
 import com.dailyai.assistant.dto.GuestInteractionRequest;
+import com.dailyai.assistant.dto.GuestFeedbackRequest;
 import com.dailyai.assistant.dto.GuestRecommendationsDto;
 import com.dailyai.assistant.entity.Article;
 import com.dailyai.assistant.entity.GuestArticleInteraction;
@@ -29,6 +30,7 @@ public class GuestPersonalizationService {
     private static final double OPEN_WEIGHT = 0.20;
     private static final double VIEW_WEIGHT = 1.25;
     private static final double SEARCH_WEIGHT = 0.45;
+    private static final double NOT_USEFUL_FACTOR = 0.5;
     private static final double RECOMMENDATION_MATCH_THRESHOLD = 0.60;
     private static final double HALF_LIFE_DAYS = 30.0;
     private static final Map<String, Pattern> TOPIC_TERMS = Map.ofEntries(
@@ -71,18 +73,42 @@ public class GuestPersonalizationService {
         Instant now = Instant.now();
         GuestArticleInteraction interaction = interactionRepository.findByGuestIdAndArticleId(guestId, article.getId())
                 .orElseGet(() -> newInteraction(guestId, article));
-        double weight;
+        double weight = OPEN_WEIGHT;
         if (request.type() == GuestInteractionRequest.Type.OPEN) {
             interaction.setOpenCount(Math.min(100, interaction.getOpenCount() + 1));
             interaction.setOpenedAt(now);
-            weight = OPEN_WEIGHT;
-        } else {
+        } else if (request.type() == GuestInteractionRequest.Type.QUALIFIED_VIEW) {
             interaction.setQualifiedViewCount(Math.min(100, interaction.getQualifiedViewCount() + 1));
             interaction.setQualifiedViewedAt(now);
             weight = VIEW_WEIGHT;
         }
         interactionRepository.save(interaction);
         updateInterests(guestId, topics(article), weight, now);
+    }
+
+    @Transactional
+    public void recordFeedback(String guestId, Long articleId, GuestFeedbackRequest.Action action) {
+        requireActiveGuest(guestId);
+        Article article = articleRepository.findById(articleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Article " + articleId + " was not found"));
+        Instant now = Instant.now();
+        GuestArticleInteraction interaction = interactionRepository.findByGuestIdAndArticleId(guestId, articleId)
+                .orElseGet(() -> newInteraction(guestId, article));
+        interaction.setFeedbackAction(action.name());
+        if (action == GuestFeedbackRequest.Action.USEFUL) interaction.setUseful(true);
+        else if (action == GuestFeedbackRequest.Action.NOT_USEFUL) interaction.setUseful(false);
+        else interaction.setUseful(null);
+        interactionRepository.save(interaction);
+        if (action == GuestFeedbackRequest.Action.NOT_USEFUL) reduceInterests(guestId, topics(article), now);
+    }
+
+    @Transactional(readOnly = true)
+    public String feedback(String guestId, Long articleId) {
+        requireActiveGuest(guestId);
+        articleRepository.findById(articleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Article " + articleId + " was not found"));
+        return interactionRepository.findByGuestIdAndArticleId(guestId, articleId)
+                .map(GuestArticleInteraction::getFeedbackAction).orElse(null);
     }
 
     /** Stores only extracted topic labels; the submitted search text is never persisted. */
@@ -102,7 +128,8 @@ public class GuestPersonalizationService {
         Map<String, Double> scores = effectiveScores(guestId, now);
         Set<Long> excluded = new HashSet<>();
         interactionRepository.findByGuestId(guestId).stream()
-                .filter(value -> value.getOpenedAt() != null || value.getRecommendedAt() != null)
+                .filter(value -> value.getOpenedAt() != null || value.getRecommendedAt() != null
+                        || "SHOW_ME_FEWER".equals(value.getFeedbackAction()))
                 .map(value -> value.getArticle().getId()).forEach(excluded::add);
 
         List<Article> candidates = articleRepository.findAll(PageRequest.of(0, CANDIDATE_LIMIT,
@@ -171,9 +198,19 @@ public class GuestPersonalizationService {
                         created.setUpdatedAt(now);
                         return created;
                     });
-            interest.setScore(decayed(interest.getScore(), interest.getUpdatedAt(), now) + weight);
+            interest.setScore(Math.max(0.0, decayed(interest.getScore(), interest.getUpdatedAt(), now) + weight));
             interest.setUpdatedAt(now);
             interestRepository.save(interest);
+        }
+    }
+
+    private void reduceInterests(String guestId, Set<String> topics, Instant now) {
+        for (String topic : topics) {
+            interestRepository.findByGuestIdAndTopic(guestId, topic).ifPresent(interest -> {
+                interest.setScore(decayed(interest.getScore(), interest.getUpdatedAt(), now) * NOT_USEFUL_FACTOR);
+                interest.setUpdatedAt(now);
+                interestRepository.save(interest);
+            });
         }
     }
 

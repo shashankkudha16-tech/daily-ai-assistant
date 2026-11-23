@@ -18,30 +18,34 @@ jobs:
     timeout-minutes: 10
 
     env:
-      # Repository variable, e.g. https://daily-ai-assistant.onrender.com
-      RENDER_BASE_URL: ${{ vars.RENDER_BASE_URL }}
+      RAILWAY_BACKEND_URL: ${{ vars.RAILWAY_BACKEND_URL }}
+      SCHEDULER_API_KEY: ${{ secrets.SCHEDULER_API_KEY }}
 
     steps:
       - name: Validate configuration
         run: |
           set -euo pipefail
-          if [ -z "${RENDER_BASE_URL:-}" ]; then
-            echo "::error::Repository variable RENDER_BASE_URL is not set."
+          if [ -z "${RAILWAY_BACKEND_URL:-}" ]; then
+            echo "::error::Set repository variable RAILWAY_BACKEND_URL to the public HTTPS URL of the Railway backend service (for example https://your-backend.up.railway.app)."
             exit 1
           fi
-          RENDER_BASE_URL="${RENDER_BASE_URL%/}"
+          if [[ ! "$RAILWAY_BACKEND_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]]; then
+            echo "::error::RAILWAY_BACKEND_URL must be an HTTPS origin without a path or trailing slash."
+            exit 1
+          fi
+          RAILWAY_BACKEND_URL="${RAILWAY_BACKEND_URL%/}"
           {
-            echo "RENDER_BASE_URL=${RENDER_BASE_URL}"
+            echo "RAILWAY_BACKEND_URL=${RAILWAY_BACKEND_URL}"
             # 9 minutes of work, leaving headroom inside the 10 minute job timeout
             # so the summary step can still run when polling gives up.
             echo "DEADLINE_EPOCH=$(( $(date +%s) + 540 ))"
           } >> "$GITHUB_ENV"
 
-      - name: Wake Render backend
+      - name: Check Railway backend health
         run: |
           set -euo pipefail
           for attempt in $(seq 1 30); do
-            if curl -fsS --max-time 5 "${RENDER_BASE_URL}/actuator/health" >/dev/null; then
+            if curl -fsS --max-time 5 "${RAILWAY_BACKEND_URL}/actuator/health" >/dev/null; then
               echo "Backend is healthy."
               exit 0
             fi
@@ -51,17 +55,15 @@ jobs:
             echo "Waiting for backend to wake (attempt ${attempt}/30)..."
             sleep 10
           done
-          echo "::error::Backend did not become healthy within the 5 minute wake-up window."
+          echo "::error::Railway backend did not become healthy within the 5 minute wait window. Check the service URL and health check configuration."
           exit 1
 
       - name: Trigger RSS refresh
         id: trigger
-        env:
-          SCHEDULER_KEY: ${{ secrets.RENDER_SCHEDULER_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "${SCHEDULER_KEY:-}" ]; then
-            echo "::error::Repository secret RENDER_SCHEDULER_KEY is not set."
+          if [ -z "${SCHEDULER_API_KEY:-}" ]; then
+            echo "::error::Set repository secret SCHEDULER_API_KEY to the backend SCHEDULER_API_KEY value."
             exit 1
           fi
 
@@ -70,10 +72,10 @@ jobs:
 
           http_code="$(curl -sS -X POST \
             --max-time 60 \
-            -H "X-Scheduler-Key: ${SCHEDULER_KEY}" \
+            -H "X-Scheduler-Key: ${SCHEDULER_API_KEY}" \
             -o "$response_file" \
             -w "%{http_code}" \
-            "${RENDER_BASE_URL}/api/scheduler/news/refresh")"
+            "${RAILWAY_BACKEND_URL}/api/scheduler/news/refresh")"
 
           if [ "$http_code" != "202" ]; then
             echo "::error::Trigger request returned HTTP ${http_code}."
@@ -98,8 +100,6 @@ jobs:
 
       - name: Wait for RSS refresh completion
         id: poll
-        env:
-          SCHEDULER_KEY: ${{ secrets.RENDER_SCHEDULER_KEY }}
         run: |
           set -euo pipefail
           run_id="${{ steps.trigger.outputs.run_id }}"
@@ -109,10 +109,10 @@ jobs:
           while [ "$(date +%s)" -lt "${DEADLINE_EPOCH}" ]; do
             http_code="$(curl -sS \
               --max-time 15 \
-              -H "X-Scheduler-Key: ${SCHEDULER_KEY}" \
+              -H "X-Scheduler-Key: ${SCHEDULER_API_KEY}" \
               -o "$status_file" \
               -w "%{http_code}" \
-              "${RENDER_BASE_URL}/api/scheduler/news/status")"
+              "${RAILWAY_BACKEND_URL}/api/scheduler/news/status")"
 
             if [ "$http_code" != "200" ]; then
               echo "::error::Status request returned HTTP ${http_code}."

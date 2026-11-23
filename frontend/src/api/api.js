@@ -6,6 +6,10 @@ export const getGuestRecommendations = (limit = 12) =>
   client.post('/api/guest/recommendations', null, { params: { limit } }).then((r) => r.data);
 export const recordGuestInteraction = (articleId, type) =>
   client.post('/api/guest/interactions', { articleId, type });
+export const saveRecommendationFeedback = (articleId, action) =>
+  client.patch('/api/guest/feedback', { articleId, action }).then((r) => r.data);
+export const getRecommendationFeedback = (articleId) =>
+  client.get(`/api/guest/feedback/${articleId}`).then((r) => (r.data.action || '').toLowerCase().replaceAll('_', '-'));
 export const recordGuestSearch = (query) => client.post('/api/guest/search', { query });
 export const resetGuestPersonalization = () => client.delete('/api/guest/personalization');
 export const login = (email, password) => client.post('/api/auth/login', { email, password }).then((r) => ({

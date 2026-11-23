@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { getArticle, recordGuestInteraction } from '../api/api.js';
+import { getArticle, recordGuestInteraction, saveRecommendationFeedback, getRecommendationFeedback } from '../api/api.js';
 import useAsync from '../hooks/useAsync.js';
 import BookmarkToggle from '../components/BookmarkToggle.jsx';
 import { ErrorState, EmptyState, SkeletonList } from '../components/States.jsx';
@@ -154,7 +154,7 @@ export default function ArticlePage() {
           applying technical details.
         </p>
 
-        {article.usefulness && <RecommendationFeedback articleId={article.id} />}
+        {article.usefulness && <RecommendationFeedback articleId={article.id} isGuest={!user} />}
 
         {article.explanation ? (
           <section className="explanation">
@@ -169,8 +169,7 @@ export default function ArticlePage() {
                 {article.explanation.generatedBy === 'AI' ? 'AI interpretation' : 'Source-based BASIC explanation'}
               </span>
             </div>
-            {SECTIONS.filter(([key]) => key !== 'whatHappened' || !article.description)
-              .filter(([key]) => key !== 'fresherLearning' || article.usefulness?.recommendation === 'LEARN_NOW').map(([key, label]) => (
+            {SECTIONS.filter(([key]) => key !== 'fresherLearning' || article.usefulness?.recommendation === 'LEARN_NOW').map(([key, label]) => (
               <div className="explanation-item" key={key}>
                 <h3>{label}</h3>
                 <p>{article.explanation[key] || 'Not available in the provided text.'}</p>
@@ -227,29 +226,69 @@ function ResearchSummaryItem({ title, value, interpretation = false }) {
   );
 }
 
-function RecommendationFeedback({ articleId }) {
+function RecommendationFeedback({ articleId, isGuest }) {
   const key = `recommendation-feedback-${articleId}`;
-  const [feedback, setFeedback] = useState(() => window.localStorage.getItem(key) || '');
+  const [feedback, setFeedback] = useState(() => isGuest ? '' : window.localStorage.getItem(key) || '');
+  const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  function choose(value) {
-    if (feedback === value) {
-      window.localStorage.removeItem(key);
-      setFeedback('');
-      return;
+  useEffect(() => {
+    let active = true;
+    if (isGuest) {
+      getRecommendationFeedback(articleId).then((action) => {
+        if (!active) return;
+        const normalized = action.toLowerCase().replaceAll('_', '-');
+        setFeedback(normalized);
+        if (normalized) window.localStorage.setItem(key, normalized);
+        else window.localStorage.removeItem(key);
+      }).catch(() => {
+        if (active) setStatus('Could not load your saved feedback.');
+      });
     }
-    window.localStorage.setItem(key, value);
-    setFeedback(value);
+    return () => { active = false; };
+  }, [articleId, isGuest, key]);
+
+  async function choose(value) {
+    if (busy) return;
+    const next = feedback === value ? '' : value;
+    setBusy(true);
+    setStatus('');
+    try {
+      if (isGuest) {
+        const action = next ? next.replaceAll('-', '_').toUpperCase() : 'EXPLORE_LATER';
+        await saveRecommendationFeedback(articleId, action);
+      }
+      if (next) window.localStorage.setItem(key, next);
+      else window.localStorage.removeItem(key);
+      const saved = isGuest ? await getRecommendationFeedback(articleId) : next;
+      setFeedback(saved.toLowerCase().replaceAll('_', '-'));
+      setStatus(next === 'fewer'
+        ? 'Saved. This article is excluded from your future guest recommendations.'
+        : next === 'not-useful'
+          ? 'Saved. We’ll reduce this topic in your guest recommendations.'
+          : next === 'useful'
+            ? 'Saved. This does not change topic interests or recommendation selection.'
+            : isGuest
+              ? 'Saved as Explore later. This does not change topic interests or recommendation selection.'
+              : 'Feedback cleared.');
+    } catch {
+      setStatus('Could not save your feedback. Please try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <section className="recommendation-feedback" aria-label="Recommendation feedback">
       <p>Was this recommendation useful?</p>
       <div className="button-row">
-        <button type="button" className={`button small ${feedback === 'useful' ? '' : 'ghost'}`} aria-pressed={feedback === 'useful'} onClick={() => choose('useful')}>Useful</button>
-        <button type="button" className={`button small ${feedback === 'not-useful' ? '' : 'ghost'}`} aria-pressed={feedback === 'not-useful'} onClick={() => choose('not-useful')}>Not useful</button>
-        <button type="button" className={`button small ${feedback === 'fewer' ? '' : 'ghost'}`} aria-pressed={feedback === 'fewer'} onClick={() => choose('fewer')}>Show me fewer like this</button>
+        <button type="button" disabled={busy} className={`button small ${feedback === 'useful' ? '' : 'ghost'}`} aria-pressed={feedback === 'useful'} onClick={() => choose('useful')}>Useful</button>
+        <button type="button" disabled={busy} className={`button small ${feedback === 'not-useful' ? '' : 'ghost'}`} aria-pressed={feedback === 'not-useful'} onClick={() => choose('not-useful')}>Not useful</button>
+        <button type="button" disabled={busy} className={`button small ${feedback === 'fewer' ? '' : 'ghost'}`} aria-pressed={feedback === 'fewer'} onClick={() => choose('fewer')}>Show me fewer like this</button>
       </div>
-      <span className="muted small">Saved only in this browser. Feedback does not yet change ranking.</span>
+      <span className="muted small" role="status">{status || (isGuest
+        ? 'Feedback is saved to your guest session. “Show me fewer” excludes this article; “Not useful” reduces its topic.'
+        : 'Useful feedback is saved on this device. Account recommendations continue to use your profile interests.')}</span>
     </section>
   );
 }

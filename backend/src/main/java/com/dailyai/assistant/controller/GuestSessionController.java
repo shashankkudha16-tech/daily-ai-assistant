@@ -1,6 +1,7 @@
 package com.dailyai.assistant.controller;
 
 import com.dailyai.assistant.dto.GuestInteractionRequest;
+import com.dailyai.assistant.dto.GuestFeedbackRequest;
 import com.dailyai.assistant.dto.GuestRecommendationsDto;
 import com.dailyai.assistant.dto.GuestSearchRequest;
 import com.dailyai.assistant.security.GuestIdentity;
@@ -15,9 +16,11 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -75,6 +78,20 @@ public class GuestSessionController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void interaction(@Valid @RequestBody GuestInteractionRequest interaction, HttpServletRequest request) {
         personalizationService.recordInteraction(GuestIdentity.requireGuestId(request), interaction);
+    }
+
+    @PatchMapping("/feedback")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void feedback(@Valid @RequestBody GuestFeedbackRequest feedback, HttpServletRequest request) {
+        personalizationService.recordFeedback(GuestIdentity.requireGuestId(request),
+                feedback.articleId(), feedback.action());
+    }
+
+    @GetMapping("/feedback/{articleId}")
+    public Map<String, String> feedback(@PathVariable Long articleId,
+                                        HttpServletRequest request) {
+        String action = personalizationService.feedback(GuestIdentity.requireGuestId(request), articleId);
+        return action == null ? Map.of() : Map.of("action", action);
     }
 
     @PostMapping("/search")

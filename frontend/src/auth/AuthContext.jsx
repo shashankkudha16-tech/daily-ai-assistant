@@ -11,7 +11,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let active = true;
-    api.establishGuestSession().catch(() => null)
+    api.establishGuestSession()
       .then(() => api.getMe())
       .then((current) => {
         if (active) setUser(current);

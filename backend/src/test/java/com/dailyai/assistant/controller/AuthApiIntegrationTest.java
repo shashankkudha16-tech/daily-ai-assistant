@@ -137,6 +137,40 @@ class AuthApiIntegrationTest {
     }
 
     @Test
+    void guestHomepageDataAndSessionArePublicWhileAccountDashboardAndCsrfRemainProtected() throws Exception {
+        String cookie = guestCookie(mockMvc.perform(get("/api/guest/session"))
+                .andExpect(status().isOk()).andReturn());
+        mockMvc.perform(get("/api/news/latest").param("limit", "12"))
+                .andExpect(status().isOk());
+        Csrf csrf = csrf(null);
+        mockMvc.perform(post("/api/guest/recommendations").cookie(cookie(cookie))
+                        .session(csrf.session()).header("X-XSRF-TOKEN", csrf.token()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/dashboard")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/guest/recommendations").cookie(cookie(cookie)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void guestFeedbackIsCookieScopedAndRequiresCsrf() throws Exception {
+        String guestCookie = guestCookie(mockMvc.perform(get("/api/guest/session")).andReturn());
+        String payload = "{\"articleId\":" + article.getId() + ",\"action\":\"NOT_USEFUL\"}";
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/guest/feedback")
+                        .cookie(cookie(guestCookie)).contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isForbidden());
+        Csrf csrf = csrf(null);
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/guest/feedback")
+                        .cookie(cookie(guestCookie)).session(csrf.session()).header("X-XSRF-TOKEN", csrf.token())
+                        .contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/guest/feedback/{articleId}", article.getId()).cookie(cookie(guestCookie)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.action").value("NOT_USEFUL"));
+        String otherGuest = guestCookie(mockMvc.perform(get("/api/guest/session")).andReturn());
+        mockMvc.perform(get("/api/guest/feedback/{articleId}", article.getId()).cookie(cookie(otherGuest)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.action").doesNotExist());
+    }
+
+    @Test
     void guestInteractionRequiresCsrfAndRecommendationsAreCookieIsolated() throws Exception {
         String first = guestCookie(mockMvc.perform(get("/api/guest/session")).andReturn());
         String second = guestCookie(mockMvc.perform(get("/api/guest/session")).andReturn());

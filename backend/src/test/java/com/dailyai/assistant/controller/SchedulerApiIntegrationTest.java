@@ -77,6 +77,14 @@ class SchedulerApiIntegrationTest {
     }
 
     @Test
+    void schedulerRefreshRemainsKeyProtectedAndCsrfExemptForMachineClient() throws Exception {
+        when(ingestionService.refreshAll()).thenReturn(new RefreshResultDto(
+                Instant.now(), 1, 1, 0, 1, 1, 0, 0, List.of()));
+        mockMvc.perform(post("/api/scheduler/news/refresh").header("X-Scheduler-Key", "test-scheduler-key"))
+                .andExpect(status().isAccepted());
+    }
+
+    @Test
     void alreadyRunningExecutionIsReturnedInsteadOfStartingAnother() throws Exception {
         when(ingestionService.refreshAll()).thenAnswer(invocation -> {
             Thread.sleep(1000);

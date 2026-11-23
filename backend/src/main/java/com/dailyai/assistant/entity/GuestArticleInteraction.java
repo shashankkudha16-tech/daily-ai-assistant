@@ -26,6 +26,10 @@ public class GuestArticleInteraction {
     private Instant qualifiedViewedAt;
     @Column(name = "recommended_at")
     private Instant recommendedAt;
+    @Column(name = "feedback_action", length = 24)
+    private String feedbackAction;
+    @Column(name = "useful")
+    private Boolean useful;
 
     public Long getId() { return id; }
     public String getGuestId() { return guestId; }
@@ -42,4 +46,8 @@ public class GuestArticleInteraction {
     public void setQualifiedViewedAt(Instant qualifiedViewedAt) { this.qualifiedViewedAt = qualifiedViewedAt; }
     public Instant getRecommendedAt() { return recommendedAt; }
     public void setRecommendedAt(Instant recommendedAt) { this.recommendedAt = recommendedAt; }
+    public String getFeedbackAction() { return feedbackAction; }
+    public void setFeedbackAction(String feedbackAction) { this.feedbackAction = feedbackAction; }
+    public Boolean getUseful() { return useful; }
+    public void setUseful(Boolean useful) { this.useful = useful; }
 }

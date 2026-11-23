@@ -18,8 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.datasource.password=",
         "spring.flyway.enabled=true",
         // V12 uses a PostgreSQL partial unique index, which H2 cannot parse. The
-        // shared schema (V1-V11) is still fully applied and verified here. V12 is
-        // verified against PostgreSQL separately, and its entity mapping is covered
+        // shared schema (V1-V11) is still fully applied and verified here. Later migrations are
+        // verified against PostgreSQL separately, and their entity mapping is covered
         // by the H2 JPA tests that build the table from the entity.
         "spring.flyway.target=11",
         "spring.jpa.hibernate.ddl-auto=none",

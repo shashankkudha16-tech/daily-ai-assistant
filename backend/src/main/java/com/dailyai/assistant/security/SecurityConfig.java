@@ -86,6 +86,8 @@ public class SecurityConfig {
                                 "/api/auth/register", "/api/auth/logout",
                                 "/api/guest/session", "/api/guest/recommendations",
                                 "/api/guest/interactions", "/api/guest/search", "/api/guest/personalization",
+                                "/api/guest/feedback",
+                                "/api/guest/feedback/**",
                                 "/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/news/**", "/api/categories/**", "/api/tools/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

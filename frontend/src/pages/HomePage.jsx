@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { completeDailyTask, getDashboard, getLatestNews, getGuestRecommendations, resetGuestPersonalization } from '../api/api.js';
+import { completeDailyTask, getDashboard, getLatestNews, getGuestRecommendations, resetGuestPersonalization, establishGuestSession } from '../api/api.js';
 import useAsync from '../hooks/useAsync.js';
 import ArticleCard from '../components/ArticleCard.jsx';
 import ToolCard from '../components/ToolCard.jsx';
@@ -13,7 +13,7 @@ export default function HomePage() {
   const { user } = useAuth();
   const loadHome = useCallback(() => user
     ? getDashboard()
-    : Promise.all([getLatestNews(12), getGuestRecommendations(12)]).then(([latestNews, recommendations]) => ({
+    : establishGuestSession().then(() => Promise.all([getLatestNews(12), getGuestRecommendations(12)])).then(([latestNews, recommendations]) => ({
       guest: true, latestNews, recommendations, topUpdates: latestNews.slice(0, 5), trendingTools: [], recentModels: [],
     })), [user]);
   const { data, loading, error, reload, setData } = useAsync(loadHome, [loadHome]);
