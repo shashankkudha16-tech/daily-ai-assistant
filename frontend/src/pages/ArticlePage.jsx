@@ -7,19 +7,19 @@ import { ErrorState, EmptyState, SkeletonList } from '../components/States.jsx';
 import { ArrowLeftIcon, ExternalIcon } from '../components/Icons.jsx';
 import { formatDateTime } from '../utils/format.js';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { sourceNote } from '../utils/sourceNote.js';
+import { explanationFallback } from '../utils/explanationFallback.js';
 
-const SECTIONS = [
-  ['whatHappened', 'What happened?'],
-  ['importance', 'Why does it matter?'],
-  ['whoBenefits', 'Who benefits?'],
-  ['useCases', 'How can I use it?'],
-  ['technicalExplanation', 'Technical explanation'],
-  ['technology', 'Technical term, simply explained'],
-  ['howItWorks', 'How does it work?'],
-  ['whereUsed', 'Where is it used?'],
-  ['fresherLearning', 'Optional learning next step'],
-  ['practicalExample', 'Practical example from the explanation'],
+const DETAIL_SECTIONS = [
+  ['technology', 'Technical terms'],
+  ['howItWorks', 'How it works'],
+  ['whereUsed', 'Where it is used'],
+  ['practicalExample', 'Example'],
   ['relatedTechnologies', 'Related technologies'],
+  ['whoBenefits', 'Who may benefit'],
+  ['useCases', 'Use cases'],
+  ['technicalExplanation', 'Technical explanation'],
+  ['fresherLearning', 'Learning next step'],
 ];
 
 const CLAIM_KINDS = {
@@ -27,7 +27,24 @@ const CLAIM_KINDS = {
   INTERPRETATION: 'App interpretation',
 };
 
-const sectionLabel = (key) => SECTIONS.find(([section]) => section === key)?.[1] || 'Explanation';
+const SECTION_LABELS = {
+  whatHappened: 'What happened?',
+  whyItHappened: 'Why did it happen?',
+  importance: 'Why is it important?',
+  usefulToReader: 'How is this useful to me?',
+  recommendedAction: 'What should I do?',
+  technology: 'Technical terms',
+  howItWorks: 'How it works',
+  whereUsed: 'Where it is used',
+  fresherLearning: 'Learning next step',
+  practicalExample: 'Example',
+  relatedTechnologies: 'Related technologies',
+  whoBenefits: 'Who may benefit',
+  useCases: 'Use cases',
+  technicalExplanation: 'Technical explanation',
+};
+
+const sectionLabel = (key) => SECTION_LABELS[key] || 'Explanation';
 
 const recommendationLabel = (value) => ({
   LEARN_NOW: 'Learn now',
@@ -112,22 +129,6 @@ export default function ArticlePage() {
           )}
         </section>
 
-        {article.researchSummary && (
-          <section className="research-summary" aria-labelledby="research-summary-title">
-            <h2 id="research-summary-title">Research paper at a glance</h2>
-          <p className="muted small">Selected complete sentences from the publisher abstract:</p>
-            <ResearchSummaryItem title="Research problem" value={article.researchSummary.researchProblem} />
-            <ResearchSummaryItem title="What researchers investigated" value={article.researchSummary.investigation} />
-            <ResearchSummaryItem title="Main finding" value={article.researchSummary.mainFinding} />
-            <ResearchSummaryItem title="Why it may matter" value={article.researchSummary.whyItMatters} />
-            <ResearchSummaryItem title="For a beginner developer" value={article.researchSummary.beginnerDeveloperRelevance} interpretation />
-            {article.researchSummary.plainLanguageTerms !== NOT_AVAILABLE && (
-              <ResearchSummaryItem title="Technical term, simply explained" value={article.researchSummary.plainLanguageTerms} interpretation />
-            )}
-            <p className="muted small">{article.researchSummary.evidenceNote}</p>
-          </section>
-        )}
-
         {article.usefulness && (
           <section className="usefulness-panel" aria-labelledby="usefulness-title">
             <div className="explanation-heading">
@@ -149,9 +150,7 @@ export default function ArticlePage() {
         )}
 
         <p className="notice">
-          Publisher facts and research excerpts come from the feed text above. Recommendations and plain-language
-          notes are app interpretations; the feed may not support every claim. Check the original paper before
-          applying technical details.
+          Check the original publisher article before relying on details or applying technical information.
         </p>
 
         {article.usefulness && <RecommendationFeedback articleId={article.id} isGuest={!user} />}
@@ -159,49 +158,75 @@ export default function ArticlePage() {
         {article.explanation ? (
           <section className="explanation">
             <div className="explanation-heading">
-              <h2>Beginner-friendly explanation</h2>
+              <h2>Understand this update</h2>
               <span
                 className={`badge ${article.explanation.generatedBy === 'AI' ? 'ai' : ''}`}
                 title={article.explanation.generatedBy === 'AI'
                   ? `${article.explanation.provider || 'AI provider'} · ${article.explanation.model || 'model'} · ${article.explanation.latencyMs || 0} ms`
-                  : 'Built from the publisher text without an AI provider'}
+                  : 'Built from available publisher feed text without an AI provider'}
               >
-                {article.explanation.generatedBy === 'AI' ? 'AI interpretation' : 'Source-based BASIC explanation'}
+                {article.explanation.generatedBy === 'AI' ? 'AI assisted' : 'Source-based fallback'}
               </span>
             </div>
-            {SECTIONS.filter(([key]) => key !== 'fresherLearning' || article.usefulness?.recommendation === 'LEARN_NOW').map(([key, label]) => (
+            <p className="muted small">{sourceNote(article.explanation.sourceType, article.explanation.sourceCompleteness)}</p>
+            {[
+              ['whatHappened', 'What happened?'],
+              ['whyItHappened', 'Why did it happen?'],
+              ['importance', 'Why is it important?'],
+              ['usefulToReader', 'How is this useful to me?'],
+              ['recommendedAction', 'What should I do?'],
+            ].map(([key, label]) => (
               <div className="explanation-item" key={key}>
                 <h3>{label}</h3>
-                <p>{article.explanation[key] || 'Not available in the provided text.'}</p>
+                <p>{article.explanation[key] || explanationFallback(key)}</p>
               </div>
             ))}
-            {article.explanation.claims?.length > 0 && (
-              <div className="explanation-item claim-evidence">
-                <h3>Source-grounded claims</h3>
-                <p className="muted small">
-                  Each statement below is paired with the publisher quote used as evidence. A quote supports
-                  only its own claim; it is not proof of every statement on this page.
-                </p>
-                <ul className="claim-list">
-                  {article.explanation.claims.map((claim, index) => (
-                    <li key={`${claim.statement}-${index}`}>
-                      {(claim.kind || claim.section) && (
-                        <div className="claim-meta">
-                          {claim.kind && (
-                            <span className={`claim-kind ${claim.kind === 'INTERPRETATION' ? 'interpretation' : ''}`}>
+            <details className="more-details">
+              <summary>More details</summary>
+              <div className="more-details-content">
+                {DETAIL_SECTIONS.map(([key, label]) => article.explanation[key] && article.explanation[key] !== NOT_AVAILABLE && (
+                  <div className="explanation-item" key={key}>
+                    <h3>{label}</h3>
+                    <p>{article.explanation[key]}</p>
+                  </div>
+                ))}
+                {article.researchSummary && (
+                  <section className="research-summary" aria-labelledby="research-summary-title">
+                    <h3 id="research-summary-title">Research paper at a glance</h3>
+                    <ResearchSummaryItem title="Research problem" value={article.researchSummary.researchProblem} />
+                    <ResearchSummaryItem title="What researchers investigated" value={article.researchSummary.investigation} />
+                    <ResearchSummaryItem title="Main finding" value={article.researchSummary.mainFinding} />
+                    <ResearchSummaryItem title="Why it may matter" value={article.researchSummary.whyItMatters} />
+                    <ResearchSummaryItem title="For a beginner developer" value={article.researchSummary.beginnerDeveloperRelevance} interpretation />
+                    {article.researchSummary.plainLanguageTerms !== NOT_AVAILABLE && (
+                      <ResearchSummaryItem title="Technical term, simply explained" value={article.researchSummary.plainLanguageTerms} interpretation />
+                    )}
+                    <p className="muted small">{article.researchSummary.evidenceNote}</p>
+                  </section>
+                )}
+                {article.explanation.sourceEvidence && (
+                  <div className="explanation-item"><h3>Source quote</h3><blockquote>{article.explanation.sourceEvidence}</blockquote></div>
+                )}
+                {article.explanation.claims?.length > 0 && (
+                  <div className="explanation-item claim-evidence">
+                    <h3>Evidence for explanation claims</h3>
+                    <ul className="claim-list">
+                      {article.explanation.claims.map((claim, index) => (
+                        <li key={`${claim.statement}-${index}`}>
+                          <div className="claim-meta">
+                            {claim.kind && <span className={`claim-kind ${claim.kind === 'INTERPRETATION' ? 'interpretation' : ''}`}>
                               {CLAIM_KINDS[claim.kind] || claim.kind}
-                            </span>
-                          )}
-                          {claim.section && <span className="claim-section">Relates to: {sectionLabel(claim.section)}</span>}
-                        </div>
-                      )}
-                      <span>{claim.statement}</span>
-                      <blockquote>{claim.evidence}</blockquote>
-                    </li>
-                  ))}
-                </ul>
+                            </span>}
+                            {claim.section && <span className="claim-section">Relates to: {sectionLabel(claim.section)}</span>}
+                          </div>
+                          <span>{claim.statement}</span><blockquote>{claim.evidence}</blockquote>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
-            )}
+            </details>
           </section>
         ) : (
           <EmptyState title="No explanation yet" message="Open the original article for the full story." />

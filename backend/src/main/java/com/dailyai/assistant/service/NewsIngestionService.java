@@ -81,7 +81,7 @@ public class NewsIngestionService {
             for (AppProperties.Feed feed : feeds) {
                 try {
                     byte[] body = feedClient.fetch(feed.getUrl());
-                    List<ParsedArticle> articles = parser.parse(body, feed.getName());
+                    List<ParsedArticle> articles = parser.parse(body, feed.getName(), feed.isAllowAiContent());
                     itemsRead += articles.size();
 
                     int limit = Math.min(articles.size(), properties.getRss().getMaxItemsPerFeed());
@@ -166,6 +166,9 @@ public class NewsIngestionService {
                 : candidate.title());
         article.setUrl(candidate.url());
         article.setDescription(candidate.description());
+        article.setRssContent(candidate.rssContent());
+        article.setRssContentTruncated(candidate.rssContentTruncated());
+        article.setRssContentAiAllowed(candidate.rssContentAiAllowed());
         article.setSource(candidate.source() == null || candidate.source().isBlank()
                 ? feed.getName()
                 : candidate.source());

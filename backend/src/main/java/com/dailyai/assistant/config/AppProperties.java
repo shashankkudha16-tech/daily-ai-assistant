@@ -13,6 +13,7 @@ public class AppProperties {
     private String schedulerApiKey = "";
     private Cors cors = new Cors();
     private Rss rss = new Rss();
+    private ArticleContent articleContent = new ArticleContent();
     private Ai ai = new Ai();
     private Auth auth = new Auth();
 
@@ -54,6 +55,23 @@ public class AppProperties {
 
     public void setRss(Rss rss) {
         this.rss = rss;
+    }
+
+    public ArticleContent getArticleContent() { return articleContent; }
+    public void setArticleContent(ArticleContent articleContent) { this.articleContent = articleContent; }
+
+    public static class ArticleContent {
+        // Fetching publisher pages is opt-in per domain so terms can be reviewed.
+        private List<String> allowedHosts = new ArrayList<>();
+        private int timeoutMs = 5000;
+        private int maxCharacters = 30000;
+
+        public List<String> getAllowedHosts() { return allowedHosts; }
+        public void setAllowedHosts(List<String> allowedHosts) { this.allowedHosts = allowedHosts; }
+        public int getTimeoutMs() { return timeoutMs; }
+        public void setTimeoutMs(int timeoutMs) { this.timeoutMs = timeoutMs; }
+        public int getMaxCharacters() { return maxCharacters; }
+        public void setMaxCharacters(int maxCharacters) { this.maxCharacters = maxCharacters; }
     }
 
     public Ai getAi() {
@@ -145,6 +163,7 @@ public class AppProperties {
         private String name;
         private String url;
         private String category;
+        private boolean allowAiContent;
 
         public String getName() {
             return name;
@@ -169,6 +188,9 @@ public class AppProperties {
         public void setCategory(String category) {
             this.category = category;
         }
+
+        public boolean isAllowAiContent() { return allowAiContent; }
+        public void setAllowAiContent(boolean allowAiContent) { this.allowAiContent = allowAiContent; }
     }
 
     public static class Auth {
@@ -227,6 +249,9 @@ public class AppProperties {
         private String model = "openai/gpt-oss-20b";
         private int timeoutMs = 30000;
         private int maxAttempts = 2;
+        private int maxCompletionTokens = 4096;
+        /** Approximate source-token budget; the client estimates at four characters per token. */
+        private int maxSourceTokens = 4500;
         private long retryDelayMs = 1000;
         private int failureThreshold = 2;
         private long cooldownMs = 300000;
@@ -290,6 +315,12 @@ public class AppProperties {
         public void setMaxAttempts(int maxAttempts) {
             this.maxAttempts = maxAttempts;
         }
+
+        public int getMaxCompletionTokens() { return maxCompletionTokens; }
+        public void setMaxCompletionTokens(int maxCompletionTokens) { this.maxCompletionTokens = maxCompletionTokens; }
+
+        public int getMaxSourceTokens() { return maxSourceTokens; }
+        public void setMaxSourceTokens(int maxSourceTokens) { this.maxSourceTokens = maxSourceTokens; }
 
         public long getRetryDelayMs() {
             return retryDelayMs;

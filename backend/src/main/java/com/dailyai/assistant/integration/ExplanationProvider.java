@@ -20,4 +20,9 @@ public interface ExplanationProvider {
     boolean isAvailable();
 
     Optional<ExplanationDraft> generateExplanation(Article article);
+
+    /** Source-aware entry point. Providers that do not need the source material remain compatible. */
+    default Optional<ExplanationDraft> generateExplanation(Article article, ArticleSourceMaterial source) {
+        return generateExplanation(article);
+    }
 }

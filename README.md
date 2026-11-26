@@ -7,7 +7,7 @@ React (JavaScript/CSS/Axios) packaged for Android with Capacitor.
 
 The app runs completely without a paid AI service. When an OpenAI-compatible endpoint is
 configured, article explanations are upgraded by the model; otherwise a truthful offline
-explanation is generated only from the feed text.
+explanation is generated only from publisher text supplied by the feed.
 
 ## Architecture
 
@@ -30,7 +30,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for package layout and design decisions.
 |----------|------------|
 | Backend  | Java 17, Spring Boot 3.5, Spring Web, Spring Security, Spring Data JPA, Validation, Scheduler, Actuator |
 | Database | PostgreSQL 16, Flyway migrations |
-| RSS      | ROME 2.1 (`com.rometools:rome`) over the JDK HTTP client |
+| RSS      | ROME 2.1 (`com.rometools:rome`), Jsoup article parsing, and robots.txt checks |
 | Frontend | React 18, JavaScript, custom CSS, Axios, React Router (hash routing) |
 | Build    | Maven, Vite, npm |
 | Android  | Capacitor 8 |
@@ -106,6 +106,43 @@ mvn spring-boot:run
 - API: http://localhost:8080
 - Health: http://localhost:8080/actuator/health
 - On an empty article table the app fetches all configured feeds once at startup.
+
+### Publisher article text
+
+Full publisher pages are fetched only for explicitly approved hostnames. Configure
+`APP_ARTICLE_CONTENT_ALLOWED_HOSTS` as a comma-separated list (for example,
+`publisher.example,news.publisher.example`) only after reviewing the publisher's terms.
+The list is empty by default. Fetches are limited to public HTTP(S) hosts, do not follow
+redirects, check `robots.txt`, stop at access controls/paywalls, and honor `noai`/`no-llm`
+directives. When full-page extraction is disabled or unavailable, explanations use full RSS
+content only when explicitly permitted for that feed, otherwise the RSS excerpt, then the
+headline, and identify the source and whether its text was complete, partial or truncated.
+RSS text remains ingested for existing feed/article behavior, but `allow-ai-content` is false
+by default. For each feed that explicitly permits AI processing in its terms, set
+`allow-ai-content: true` on that feed (or its corresponding `RSS_<FEED>_ALLOW_AI_CONTENT`
+environment variable in `application.yml`). A false or omitted setting falls back to the
+description/excerpt or headline before calling the AI provider.
+
+AI explanation output is accepted only when required JSON fields are present and its claims
+can be tied to the selected source. The local factuality check is conservative: it checks whole
+sentences and standard contraction normalization, preserves polarity and key numbers/dates/qualifiers, and
+uses an unavailable fallback when it cannot establish support. It is not a general semantic
+entailment system and does not establish that a publisher's statement is true. Accurate
+paraphrases outside the supported patterns may be rejected; do not relax this check to increase
+AI explanation acceptance.
+
+For Groq GPT-OSS, strict JSON Schema mode is paired with `include_reasoning=false`. Groq's model-specific
+documentation says GPT-OSS does not support `reasoning_format`, and the two reasoning controls are
+mutually exclusive. The completion limit defaults
+to 4,096 tokens (`AI_MAX_COMPLETION_TOKENS`). Source text has a configurable approximate budget of
+4,500 tokens (`AI_MAX_SOURCE_TOKENS`), estimated at four characters per token. Exact duplicate
+sentences are removed; any budget truncation stops at a sentence boundary and is marked `TRUNCATED`
+in the provider prompt. The estimate is not a tokenizer count. The client
+accepts a complete JSON object, optionally wrapped in a Markdown code fence, only after validating
+all required fields, types, claim count, section names and claim kinds. It rejects malformed,
+truncated, refused or incomplete output; it never converts plain text into an explanation. Other
+compatible providers continue to receive JSON object mode. A 200 response with invalid JSON/schema is not
+retried, since repeating an unchanged prompt unnecessarily consumes provider quota.
 
 Run the tests:
 
@@ -231,6 +268,8 @@ Optional resilience settings (defaults shown):
 AI_TIMEOUT_MS=30000        # per request, connect + read
 AI_MAX_ATTEMPTS=2          # total attempts for transient failures
 AI_RETRY_DELAY_MS=1000     # base delay, doubled per attempt (capped at 10s)
+AI_MAX_SOURCE_TOKENS=4500  # approximate source budget (4 chars/token)
+AI_MAX_COMPLETION_TOKENS=4096 # enough space for structured explanation and evidence
 AI_FAILURE_THRESHOLD=2     # consecutive failures before pausing
 AI_COOLDOWN_MS=300000      # pause length after the threshold is reached
 AI_MAX_CALLS_PER_DAY=100   # hard provider-request cap; 0 disables it
@@ -242,22 +281,54 @@ Behaviour:
 - With no key (or `AI_ENABLED=false`) every article gets the truthful offline explanation
   built only from the feed title and description; the app is fully functional.
 - `429` and `5xx` responses are retried with bounded exponential backoff and an honoured
-  `Retry-After` header. Timeouts and network errors are retried, then swallowed.
+  `Retry-After` header. A long server delay defers later provider calls through a cooldown;
+  each actual attempt reserves one daily request. Timeouts and network errors are retried, then
+  swallowed.
 - After repeated failures the provider is skipped during the cooldown, so article pages keep
   loading quickly instead of waiting on a broken provider.
 - `400`/`401`/`403` are treated as configuration errors and are not retried.
 - The prompt forbids invented facts and requires `"Not available in the provided text."` for
   unknown details. `generatedBy` in the API reports `AI` or `BASIC`.
-- AI text must include claim-level evidence. Each claim is stored only when its quote exists
-  in the publisher title or description; unsupported claims are dropped. The BASIC fallback
+- AI text must include claim-level evidence. Each claim is stored only when its evidence and
+  statement are supported by the selected publisher source; unsupported claims are dropped. The BASIC fallback
   is used when no claim can be grounded.
 - Provider, model, input/output tokens and latency are stored per explanation and logged
   without prompts or secrets. `AI_MAX_CALLS_PER_DAY` caps spending.
+
+## Phase 5.1 — Grounding and token optimization (local verification)
+
+- The live test article was OpenAI News, extracted as `FULL_ARTICLE / COMPLETE` (14,595 characters).
+  It was sent once through the local `ExplanationService` flow using an isolated in-memory article
+  and repository. The approximate prompt size was 4,002 input tokens; Groq returned HTTP 400 with
+  the sanitized category `json_generation_validation`. It supplied no usable response or usage
+  metadata, and the application retained its BASIC fallback. No retry was made, so no Phase 5.1
+  AI explanation was accepted.
+- The prompt now specifies the schema once, avoids repeating publisher/category/date/URL metadata,
+  requests concise narrative sections, removes exact repeated source sentences, and applies a
+  configurable sentence-boundary source budget. Factual validation runs against exactly the
+  selected text sent to the provider; it remains fail-closed and is not relaxed.
+- No actual provider prompt-token baseline was recorded for the earlier implementation, and the
+  Phase 5.1 HTTP 400 had no usage metadata. Therefore a percentage token reduction cannot be
+  calculated. The earlier 1,714-token completion was from a rejected response and is not a
+  comparable accepted-result baseline.
+- Mock tests verify supported source claims, negation/contradiction, uncertain claims, unsupported
+  recommendations, absent evidence, numbers/dates, malformed schemas and sentence-boundary budgets.
+  The local live result confirms that provider JSON generation remains an unresolved blocker.
+
+## Phase 5.2 — GPT-OSS reasoning request correction
+
+- Groq's current model-specific documentation says GPT-OSS 20B does not support
+  `reasoning_format`; the request uses `include_reasoning: false` and strict JSON Schema output.
+- Local serialization tests cover the model, response schema, token cap, reasoning flags, absence
+  of duplicate/conflicting flags, and unchanged behavior for non-Groq providers. No live request
+  was made in this phase. The prior HTTP 400's exact cause remains unconfirmed until a later
+  explicitly approved live request.
 - Personalisation stays deterministic: the article explanation is cached globally, while the
   `LEARN_NOW` / `EXPLORE_LATER` / `SKIP` verdict is computed per authenticated user from their
   own interests, so one user's preferences never leak into another user's page.
-- A response that is not usable JSON triggers one retry without `response_format`, then the
-  offline explanation is kept.
+- Invalid, truncated or schema-incomplete output is rejected without a duplicate request; the
+  application keeps its truthful BASIC offline explanation. One provider request at a time is
+  allowed per backend instance.
 
 Tests use a local mock provider that implements the OpenAI protocol, so no key is needed:
 
@@ -266,9 +337,28 @@ cd backend
 mvn test -Dtest=AiClientTest,ExplanationServiceTest
 ```
 
-Real-provider generation has not been verified in this environment because no `AI_API_KEY`
-is available; the complete request/response path was verified end to end against the mock
-provider (see `DEVELOPMENT_PROGRESS.md`).
+Earlier five-article provider trials were not accepted and included HTTP 400/429 responses. The
+latest controlled local request for the OpenAI article returned HTTP 200 with complete strict-schema
+JSON and 3,844 prompt / 3,607 completion tokens. Three sections had supported source evidence; two
+sections were replaced with the unavailable fallback after contradictory context was found. The
+response was saved locally as AI-assisted, but this is not a claim that all five sections passed.
+Grounding intentionally requires exact source-sentence support; accurate paraphrases may therefore
+fall back. No entailment model is used. See `DEVELOPMENT_PROGRESS.md` for the validation design and
+remaining limitations.
+
+### Latest local explanation quality check
+
+- The prompt now distinguishes explicit causes, reader benefits, and publisher-directed actions,
+  and tells the model not to transfer capabilities between named subjects. Unsupported fields still
+  use the unavailable fallback; validation rules were not relaxed.
+- One follow-up Groq request returned HTTP 200 (`finish_reason=stop`), with valid strict-schema JSON
+  and usage of 3,944 prompt plus 2,957 completion tokens. Three of five source claims were retained;
+  two were rejected for contradictory or absent evidence. `whatHappened` and `recommendedAction`
+  fell back; `whyItHappened`, `importance`, and `usefulToReader` passed. The full new draft failed
+  the existing substance gate, so the previously cached local explanation was kept. This request
+  did not produce a newly accepted explanation. No retry or follow-up request was made.
+- The configured completion limit is 4,096 tokens. Factual validation remains fail-closed and exact
+  sentence support means some correct paraphrases can still be rejected.
 
 ## Android build (Capacitor)
 

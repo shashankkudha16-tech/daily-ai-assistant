@@ -8,6 +8,8 @@ import com.dailyai.assistant.entity.Category;
 import com.dailyai.assistant.integration.ArticleCategorizer;
 import com.dailyai.assistant.integration.ExplanationProvider;
 import com.dailyai.assistant.integration.ParsedArticle;
+import com.dailyai.assistant.integration.PublisherArticleExtractor;
+import com.dailyai.assistant.integration.NarrativeFactualityValidator;
 import com.dailyai.assistant.integration.RssFeedClient;
 import com.dailyai.assistant.integration.RssParser;
 import com.dailyai.assistant.repository.ArticleExplanationRepository;
@@ -68,7 +70,9 @@ class SchedulerAiDisabledIngestionTest {
         properties.getAi().setEnabled(false);
         properties.getAi().setApiKey("");
 
-        explanationService = new ExplanationService(explanationRepository, provider, new ObjectMapper(), properties);
+        explanationService = new ExplanationService(explanationRepository, provider, new ObjectMapper(), properties,
+                new PublisherArticleContentPersistenceService(articleRepository, new PublisherArticleExtractor(properties)),
+                new NarrativeFactualityValidator());
         ingestionService = new NewsIngestionService(properties, feedClient, parser, categorizer,
                 articleRepository, categoryRepository, explanationService);
 
@@ -83,7 +87,7 @@ class SchedulerAiDisabledIngestionTest {
                 "A feed description.", Instant.now(), "Test Feed", null, null);
 
         when(feedClient.fetch(anyString())).thenReturn("<rss/>".getBytes());
-        when(parser.parse(any(byte[].class), anyString())).thenReturn(List.of(candidate));
+        when(parser.parse(any(byte[].class), anyString(), org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(List.of(candidate));
         when(articleRepository.existsByUrl("https://example.com/a")).thenReturn(false);
         when(articleRepository.save(any(Article.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(categorizer.categorize(anyString(), anyString(), anyString())).thenReturn("generative-ai");

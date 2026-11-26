@@ -24,6 +24,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -69,7 +70,7 @@ class NewsIngestionServiceTest {
                 Instant.now(), "Test Feed", null, null);
 
         when(feedClient.fetch(anyString())).thenReturn("<rss/>".getBytes());
-        when(parser.parse(any(byte[].class), anyString())).thenReturn(List.of(first, duplicate, known));
+        when(parser.parse(any(byte[].class), anyString(), anyBoolean())).thenReturn(List.of(first, duplicate, known));
         when(articleRepository.existsByUrl("https://example.com/a")).thenReturn(false);
         when(articleRepository.existsByUrl("https://example.com/known")).thenReturn(true);
         when(categorizer.categorize(anyString(), anyString(), anyString())).thenReturn("generative-ai");
@@ -99,7 +100,7 @@ class NewsIngestionServiceTest {
         properties.getRss().setFeeds(List.of(properties.getRss().getFeeds().get(0), second));
 
         when(feedClient.fetch("https://example.com/feed.xml")).thenReturn("<rss/>".getBytes());
-        when(parser.parse(any(byte[].class), anyString())).thenReturn(List.of());
+        when(parser.parse(any(byte[].class), anyString(), anyBoolean())).thenReturn(List.of());
         when(feedClient.fetch("https://example.com/broken.xml")).thenThrow(new IOException("HTTP 503"));
 
         RefreshResultDto result = service.refreshAll();
@@ -118,7 +119,7 @@ class NewsIngestionServiceTest {
         ParsedArticle invalid = new ParsedArticle("Bad", "javascript:alert(1)", null,
                 null, "Test Feed", null, null);
         when(feedClient.fetch(anyString())).thenReturn("<rss/>".getBytes());
-        when(parser.parse(any(byte[].class), anyString())).thenReturn(List.of(invalid));
+        when(parser.parse(any(byte[].class), anyString(), anyBoolean())).thenReturn(List.of(invalid));
 
         RefreshResultDto result = service.refreshAll();
 

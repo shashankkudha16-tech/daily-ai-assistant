@@ -6,7 +6,11 @@ import com.dailyai.assistant.entity.ArticleExplanation;
 import com.dailyai.assistant.entity.Category;
 import com.dailyai.assistant.integration.ExplanationDraft;
 import com.dailyai.assistant.integration.ExplanationProvider;
+import com.dailyai.assistant.integration.PublisherArticleExtractor;
+import com.dailyai.assistant.integration.ArticleSourceMaterial;
+import com.dailyai.assistant.integration.NarrativeFactualityValidator;
 import com.dailyai.assistant.repository.ArticleExplanationRepository;
+import com.dailyai.assistant.repository.ArticleRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,7 +43,9 @@ class ExplanationServiceTest {
     void setUp() {
         AppProperties properties = new AppProperties();
         properties.getAi().setRetryAfterMinutes(360);
-        service = new ExplanationService(explanationRepository, provider, new ObjectMapper(), properties);
+        service = new ExplanationService(explanationRepository, provider, new ObjectMapper(), properties,
+                new PublisherArticleContentPersistenceService(org.mockito.Mockito.mock(ArticleRepository.class),
+                        new PublisherArticleExtractor(properties)), new NarrativeFactualityValidator());
         org.mockito.Mockito.lenient()
                 .when(explanationRepository.save(any(ArticleExplanation.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -57,25 +63,34 @@ class ExplanationServiceTest {
         assertThat(explanation.getTechnology()).isEqualTo("Not available in the provided text.");
         assertThat(explanation.getHowItWorks()).isEqualTo("Not available in the provided text.");
         assertThat(explanation.getWhatHappened()).isEqualTo("A short feed description.");
-        assertThat(explanation.getImportance()).contains("follow changes in AI").doesNotContain("becoming useful");
+        assertThat(explanation.getImportance()).isEqualTo("Not available in the provided text.");
         assertThat(explanation.getPracticalExample()).isEqualTo("Not available in the provided text.");
-        assertThat(explanation.getFresherLearning()).startsWith("Key takeaway:");
-        assertThat(explanation.getWhoBenefits()).contains("does not name a specific audience");
+        assertThat(explanation.getFresherLearning()).isEqualTo("Not available in the provided text.");
+        assertThat(explanation.getWhyItHappened()).isEqualTo("Not available in the provided text.");
+        assertThat(explanation.getUsefulToReader()).isEqualTo("Not available in the provided text.");
+        assertThat(explanation.getRecommendedAction()).isEqualTo("Not available in the provided text.");
+        assertThat(explanation.getSourceType()).isEqualTo("EXCERPT");
+        assertThat(explanation.getWhoBenefits()).isEqualTo("Not available in the provided text.");
         assertThat(service.isAiEnabled()).isFalse();
     }
 
     @Test
     void providerDraftUpgradesTheExplanationWithClaimsAndUsage() {
         when(provider.isEnabled()).thenReturn(true);
+        when(provider.isAvailable()).thenReturn(true);
         when(explanationRepository.findByArticleId(1L)).thenReturn(Optional.empty());
-        when(provider.generateExplanation(any(Article.class))).thenReturn(Optional.of(draft()));
+        when(provider.generateExplanation(any(Article.class), any(ArticleSourceMaterial.class))).thenReturn(Optional.of(draft()));
 
         ArticleExplanation explanation = service.getOrCreate(article(), true);
 
         assertThat(explanation.getGeneratedBy()).isEqualTo(ArticleExplanation.GeneratedBy.AI);
-        assertThat(explanation.getWhatHappened()).isEqualTo("A new model shipped.");
-        assertThat(explanation.getWhoBenefits()).isEqualTo("Developers comparing models.");
-        assertThat(explanation.getTechnicalExplanation()).isEqualTo("A model predicts the next token.");
+        assertThat(explanation.getWhatHappened()).isEqualTo("New model ships.");
+        assertThat(explanation.getWhoBenefits()).isEqualTo("Not available in the provided text.");
+        assertThat(explanation.getTechnicalExplanation()).isEqualTo("Not available in the provided text.");
+        assertThat(explanation.getWhyItHappened()).isEqualTo("Not available in the provided text.");
+        assertThat(explanation.getUsefulToReader()).isEqualTo("Not available in the provided text.");
+        assertThat(explanation.getRecommendedAction()).isEqualTo("Not available in the provided text.");
+        assertThat(explanation.getSourceType()).isEqualTo("EXCERPT");
         assertThat(explanation.getClaimsJson()).contains("A short feed description.");
         assertThat(explanation.getProvider()).isEqualTo("mock");
         assertThat(explanation.getModel()).isEqualTo("mock-model");
@@ -89,13 +104,14 @@ class ExplanationServiceTest {
     @Test
     void providerFailureKeepsTheOfflineExplanationStored() {
         when(provider.isEnabled()).thenReturn(true);
+        when(provider.isAvailable()).thenReturn(true);
         ArticleExplanation existing = new ArticleExplanation();
         existing.setId(5L);
         existing.setArticle(article());
         existing.setWhatHappened("Offline text.");
         existing.setGeneratedBy(ArticleExplanation.GeneratedBy.BASIC);
         when(explanationRepository.findByArticleId(1L)).thenReturn(Optional.of(existing));
-        when(provider.generateExplanation(any(Article.class))).thenReturn(Optional.empty());
+        when(provider.generateExplanation(any(Article.class), any(ArticleSourceMaterial.class))).thenReturn(Optional.empty());
 
         ArticleExplanation explanation = service.getOrCreate(article(), true);
 
@@ -108,8 +124,9 @@ class ExplanationServiceTest {
     @Test
     void incompleteOrUnanchoredProviderDraftKeepsTheOfflineExplanation() {
         when(provider.isEnabled()).thenReturn(true);
+        when(provider.isAvailable()).thenReturn(true);
         when(explanationRepository.findByArticleId(1L)).thenReturn(Optional.empty());
-        when(provider.generateExplanation(any(Article.class))).thenReturn(Optional.of(new ExplanationDraft(
+        when(provider.generateExplanation(any(Article.class), any(ArticleSourceMaterial.class))).thenReturn(Optional.of(new ExplanationDraft(
                 "Unsupported headline", "Technology", "Importance", "How", "Where", "Learn", "Example", "Related",
                 "quote not present in the article", "Who", "Use", "Technical",
                 List.of(new ExplanationDraft.Claim("Unsupported headline", "quote not present in the article")),
@@ -124,6 +141,7 @@ class ExplanationServiceTest {
     @Test
     void failedArticleIsNotRetriedInsideTheRetryWindow() {
         when(provider.isEnabled()).thenReturn(true);
+        when(provider.isAvailable()).thenReturn(true);
         ArticleExplanation existing = new ArticleExplanation();
         existing.setId(7L);
         existing.setArticle(article());
@@ -134,12 +152,13 @@ class ExplanationServiceTest {
 
         service.getOrCreate(article(), true);
 
-        verify(provider, never()).generateExplanation(any(Article.class));
+        verify(provider, never()).generateExplanation(any(Article.class), any(ArticleSourceMaterial.class));
     }
 
     @Test
     void manualRegenerateBypassesTheRetryWindow() {
         when(provider.isEnabled()).thenReturn(true);
+        when(provider.isAvailable()).thenReturn(true);
         ArticleExplanation existing = new ArticleExplanation();
         existing.setId(8L);
         existing.setArticle(article());
@@ -147,7 +166,7 @@ class ExplanationServiceTest {
         existing.setAiAttemptedAt(Instant.now());
         existing.setAiAttempts(1);
         when(explanationRepository.findByArticleId(1L)).thenReturn(Optional.of(existing));
-        when(provider.generateExplanation(any(Article.class))).thenReturn(Optional.of(draft()));
+        when(provider.generateExplanation(any(Article.class), any(ArticleSourceMaterial.class))).thenReturn(Optional.of(draft()));
 
         ArticleExplanation explanation = service.regenerateWithAi(article());
 
@@ -176,21 +195,21 @@ class ExplanationServiceTest {
 
         ArticleExplanation explanation = service.createBasic(article);
 
-        assertThat(explanation.getWhatHappened()).contains("feed has no summary")
-                .contains(article.getTitle());
+        assertThat(explanation.getWhatHappened()).isEqualTo(article.getTitle());
+        assertThat(explanation.getSourceType()).isEqualTo("TITLE_ONLY");
         assertThat(explanation.getHowItWorks()).isEqualTo("Not available in the provided text.");
         assertThat(explanation.getGeneratedBy()).isEqualTo(ArticleExplanation.GeneratedBy.BASIC);
     }
 
     @Test
-    void researchImportanceExplainsThatAnAbstractIsNotProductReadinessEvidence() {
+    void researchBasicFallbackDoesNotInventImportance() {
         Article article = article();
         article.setCategory(new Category("AI Research", "ai-research", null));
         when(explanationRepository.findByArticleId(1L)).thenReturn(Optional.empty());
 
         ArticleExplanation explanation = service.createBasic(article);
 
-        assertThat(explanation.getImportance()).contains("research result", "does not show", "limits");
+        assertThat(explanation.getImportance()).isEqualTo("Not available in the provided text.");
     }
 
     @Test
@@ -207,19 +226,22 @@ class ExplanationServiceTest {
 
     private ExplanationDraft draft() {
         return new ExplanationDraft(
-                "A new model shipped.",
-                "A neural network.",
-                "It is faster.",
-                "It predicts tokens.",
-                "Chat assistants.",
-                "Learn transformers.",
-                "Build a demo.",
-                "LLMs, RAG",
+                "New model ships.",
+                "Not available in the provided text.",
                 "A short feed description.",
-                "Developers comparing models.",
-                "Try a small summarisation feature.",
-                "A model predicts the next token.",
-                List.of(new ExplanationDraft.Claim("A new model shipped.", "A short feed description.")),
+                "A short feed description.",
+                "Not available in the provided text.",
+                "Not available in the provided text.",
+                "Not available in the provided text.",
+                "Not available in the provided text.",
+                "A short feed description.",
+                "Not available in the provided text.",
+                "Not available in the provided text.",
+                "Not available in the provided text.",
+                "Not available in the provided text.",
+                "Not available in the provided text.",
+                "Not available in the provided text.",
+                List.of(new ExplanationDraft.Claim("A short feed description.", "A short feed description.")),
                 new ExplanationDraft.Metadata("mock", "mock-model", 120, 80, 42));
     }
 

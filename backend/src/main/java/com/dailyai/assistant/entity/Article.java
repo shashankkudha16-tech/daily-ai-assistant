@@ -26,6 +26,24 @@ public class Article {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column(name = "rss_content", columnDefinition = "TEXT")
+    private String rssContent;
+
+    @Column(name = "rss_content_truncated", nullable = false)
+    private boolean rssContentTruncated;
+
+    @Column(name = "rss_content_ai_allowed", nullable = false)
+    private boolean rssContentAiAllowed;
+
+    @Column(name = "publisher_source_content", columnDefinition = "TEXT")
+    private String publisherSourceContent;
+
+    @Column(name = "publisher_source_type", length = 20)
+    private String publisherSourceType;
+
+    @Column(name = "publisher_source_completeness", length = 20)
+    private String publisherSourceCompleteness;
+
     @Column(length = 200)
     private String source;
 
@@ -76,6 +94,19 @@ public class Article {
     public void setDescription(String description) {
         this.description = description;
     }
+
+    public String getRssContent() { return rssContent; }
+    public void setRssContent(String rssContent) { this.rssContent = rssContent; }
+    public boolean isRssContentTruncated() { return rssContentTruncated; }
+    public void setRssContentTruncated(boolean value) { this.rssContentTruncated = value; }
+    public boolean isRssContentAiAllowed() { return rssContentAiAllowed; }
+    public void setRssContentAiAllowed(boolean value) { this.rssContentAiAllowed = value; }
+    public String getPublisherSourceContent() { return publisherSourceContent; }
+    public void setPublisherSourceContent(String value) { this.publisherSourceContent = value; }
+    public String getPublisherSourceType() { return publisherSourceType; }
+    public void setPublisherSourceType(String value) { this.publisherSourceType = value; }
+    public String getPublisherSourceCompleteness() { return publisherSourceCompleteness; }
+    public void setPublisherSourceCompleteness(String value) { this.publisherSourceCompleteness = value; }
 
     public String getSource() {
         return source;

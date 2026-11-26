@@ -25,9 +25,23 @@ public record ExplanationDraft(
         String whoBenefits,
         String useCases,
         String technicalExplanation,
+        String whyItHappened,
+        String usefulToReader,
+        String recommendedAction,
         List<Claim> claims,
         Metadata metadata
 ) {
+
+    /** Backward-compatible constructor for existing callers and cached-shape tests. */
+    public ExplanationDraft(String whatHappened, String technology, String importance, String howItWorks,
+                            String whereUsed, String fresherLearning, String practicalExample,
+                            String relatedTechnologies, String sourceEvidence, String whoBenefits,
+                            String useCases, String technicalExplanation, List<Claim> claims, Metadata metadata) {
+        this(whatHappened, technology, importance, howItWorks, whereUsed, fresherLearning,
+                practicalExample, relatedTechnologies, sourceEvidence, whoBenefits, useCases,
+                technicalExplanation, NarrativeFactualityValidator.NOT_AVAILABLE, useCases,
+                fresherLearning, claims, metadata);
+    }
 
     /**
      * Claim provenance. A null section is accepted for legacy stored claims;
@@ -68,15 +82,21 @@ public record ExplanationDraft(
                 && hasText(sourceEvidence)
                 && hasText(whoBenefits)
                 && hasText(useCases)
-                && hasText(technicalExplanation);
+                && hasText(technicalExplanation)
+                && hasText(whyItHappened)
+                && hasText(usefulToReader)
+                && hasText(recommendedAction);
     }
 
     public boolean hasSourceEvidence(Article article) {
+        return hasSourceEvidence(article, ArticleSourceMaterial.fromFeed(article));
+    }
+
+    public boolean hasSourceEvidence(Article article, ArticleSourceMaterial source) {
         if (article == null || sourceEvidence == null || sourceEvidence.isBlank()) {
             return false;
         }
-        return sourceText(article).contains(sourceEvidence.trim().toLowerCase(Locale.ROOT))
-                || beginsWithArticleTitle(article, sourceEvidence);
+        return SourceTextMatcher.contains(sourceText(article, source), sourceEvidence.trim());
     }
 
     /**
@@ -84,13 +104,21 @@ public record ExplanationDraft(
      * One valid global quote is not treated as proof for unrelated claims.
      */
     public List<Claim> supportedClaims(Article article) {
+        return supportedClaims(article, ArticleSourceMaterial.fromFeed(article));
+    }
+
+    public List<Claim> supportedClaims(Article article, ArticleSourceMaterial sourceMaterial) {
         if (claims == null || article == null) {
             return List.of();
         }
-        String source = sourceText(article);
+        String source = sourceText(article, sourceMaterial);
+        SourceClaimVerifier verifier = new SourceClaimVerifier();
         return claims.stream()
                 .filter(claim -> claim != null && hasText(claim.statement()) && hasText(claim.evidence()))
-                .filter(claim -> source.contains(claim.evidence().trim().toLowerCase(Locale.ROOT)))
+                .filter(claim -> SourceTextMatcher.contains(source, claim.evidence()))
+                .filter(claim -> claim.kind() != Claim.Kind.INTERPRETATION)
+                .filter(claim -> verifier.supports(claim.evidence(), claim.statement()))
+                .filter(claim -> !verifier.hasContradictoryContext(source, claim.statement()))
                 .filter(claim -> claim.kind() == null || claim.kind() == Claim.Kind.SOURCE_FACT
                         || claim.kind() == Claim.Kind.INTERPRETATION)
                 .distinct()
@@ -99,6 +127,11 @@ public record ExplanationDraft(
 
     public boolean hasGroundedSourceFact(Article article) {
         return supportedClaims(article).stream()
+                .anyMatch(claim -> claim.kind() == null || claim.kind() == Claim.Kind.SOURCE_FACT);
+    }
+
+    public boolean hasGroundedSourceFact(Article article, ArticleSourceMaterial source) {
+        return supportedClaims(article, source).stream()
                 .anyMatch(claim -> claim.kind() == null || claim.kind() == Claim.Kind.SOURCE_FACT);
     }
 
@@ -141,7 +174,8 @@ public record ExplanationDraft(
     public ExplanationDraft withClaims(List<Claim> supported) {
         return new ExplanationDraft(whatHappened, technology, importance, howItWorks, whereUsed,
                 fresherLearning, practicalExample, relatedTechnologies, sourceEvidence,
-                whoBenefits, useCases, technicalExplanation, supported, metadata);
+                whoBenefits, useCases, technicalExplanation, whyItHappened, usefulToReader,
+                recommendedAction, supported, metadata);
     }
 
     private static boolean beginsWithArticleTitle(Article article, String evidence) {
@@ -150,9 +184,9 @@ public record ExplanationDraft(
                 && title.toLowerCase(Locale.ROOT).startsWith(evidence.trim().toLowerCase(Locale.ROOT));
     }
 
-    private static String sourceText(Article article) {
-        return ((article.getTitle() == null ? "" : article.getTitle()) + " "
-                + (article.getDescription() == null ? "" : article.getDescription()))
+    private static String sourceText(Article article, ArticleSourceMaterial material) {
+        return ((article.getTitle() == null ? "" : article.getTitle()) + ". "
+                + (material == null ? "" : material.text()))
                 .toLowerCase(Locale.ROOT);
     }
 

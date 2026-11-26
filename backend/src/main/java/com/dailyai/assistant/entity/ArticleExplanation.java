@@ -59,6 +59,21 @@ public class ArticleExplanation {
     @Column(name = "technical_explanation", columnDefinition = "TEXT")
     private String technicalExplanation;
 
+    @Column(name = "why_it_happened", columnDefinition = "TEXT")
+    private String whyItHappened;
+
+    @Column(name = "useful_to_reader", columnDefinition = "TEXT")
+    private String usefulToReader;
+
+    @Column(name = "recommended_action", columnDefinition = "TEXT")
+    private String recommendedAction;
+
+    @Column(name = "source_type", length = 20)
+    private String sourceType;
+
+    @Column(name = "source_completeness", length = 20, nullable = false)
+    private String sourceCompleteness = "UNKNOWN";
+
     /** JSON array of {statement, evidence} pairs, each quote verified against the feed text. */
     @Column(name = "claims_json", columnDefinition = "TEXT")
     private String claimsJson;
@@ -197,6 +212,17 @@ public class ArticleExplanation {
     public void setTechnicalExplanation(String technicalExplanation) {
         this.technicalExplanation = technicalExplanation;
     }
+
+    public String getWhyItHappened() { return whyItHappened; }
+    public void setWhyItHappened(String whyItHappened) { this.whyItHappened = whyItHappened; }
+    public String getUsefulToReader() { return usefulToReader; }
+    public void setUsefulToReader(String usefulToReader) { this.usefulToReader = usefulToReader; }
+    public String getRecommendedAction() { return recommendedAction; }
+    public void setRecommendedAction(String recommendedAction) { this.recommendedAction = recommendedAction; }
+    public String getSourceType() { return sourceType; }
+    public void setSourceType(String sourceType) { this.sourceType = sourceType; }
+    public String getSourceCompleteness() { return sourceCompleteness; }
+    public void setSourceCompleteness(String sourceCompleteness) { this.sourceCompleteness = sourceCompleteness; }
 
     public String getClaimsJson() {
         return claimsJson;

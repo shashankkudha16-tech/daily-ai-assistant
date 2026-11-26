@@ -1,5 +1,6 @@
 package com.dailyai.assistant.integration;
 
+import com.dailyai.assistant.entity.Article;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -52,6 +53,10 @@ class RssParserTest {
         assertThat(first.publishedAt()).isEqualTo(Instant.parse("2026-11-16T09:30:00Z"));
         assertThat(first.source()).isEqualTo("Example AI Blog");
         assertThat(first.author()).isEqualTo("Jane Doe");
+        assertThat(first.rssContentAiAllowed()).isFalse();
+
+        ParsedArticle allowed = parser.parse(RSS.getBytes(StandardCharsets.UTF_8), "fallback", true).get(0);
+        assertThat(allowed.rssContentAiAllowed()).isTrue();
 
         ParsedArticle second = articles.get(1);
         assertThat(second.title()).isEqualTo("No date item");
@@ -77,6 +82,57 @@ class RssParserTest {
 
         assertThat(articles).extracting(ParsedArticle::author).containsExactly("Alex Atom", "Casey Creator");
         assertThat(articles).extracting(ParsedArticle::source).containsOnly("Atom Publisher");
+    }
+
+    @Test
+    void preservesSanitizedAndBoundedRssFullContentSeparatelyFromTheExcerpt() throws Exception {
+        String rss = """
+                <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+                  <channel><title>Publisher</title><item><title>Story</title>
+                    <link>https://example.com/story</link><description><![CDATA[<p>Short excerpt</p>]]></description>
+                    <content:encoded><![CDATA[<article><p>Full publisher content.</p><script>bad()</script></article>]]></content:encoded>
+                  </item></channel>
+                </rss>
+                """;
+
+        ParsedArticle parsed = parser.parse(rss.getBytes(StandardCharsets.UTF_8), "fallback").get(0);
+
+        assertThat(parsed.description()).isEqualTo("Short excerpt");
+        assertThat(parsed.rssContent()).contains("Full publisher content.").doesNotContain("bad()");
+        assertThat(parsed.rssContentAiAllowed()).isFalse();
+    }
+
+    @Test
+    void doesNotPromoteUnpermittedFullContentToExcerptWhenDescriptionIsMissing() throws Exception {
+        String rss = """
+                <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+                  <channel><title>Publisher</title><item><title>Story</title>
+                    <link>https://example.com/story</link>
+                    <content:encoded><![CDATA[<article><p>Full body only.</p></article>]]></content:encoded>
+                  </item></channel>
+                </rss>
+                """;
+
+        ParsedArticle denied = parser.parse(rss.getBytes(StandardCharsets.UTF_8), "fallback", false).get(0);
+        assertThat(denied.rssContent()).contains("Full body only.");
+        assertThat(denied.description()).isNull();
+        assertThat(denied.rssContentAiAllowed()).isFalse();
+
+        Article article = new Article();
+        article.setTitle(denied.title());
+        article.setDescription(denied.description());
+        article.setRssContent(denied.rssContent());
+        article.setRssContentAiAllowed(denied.rssContentAiAllowed());
+        ArticleSourceMaterial selected = ArticleSourceMaterial.fromFeed(article);
+        assertThat(selected.type()).isEqualTo(ArticleSourceMaterial.Type.TITLE_ONLY);
+        assertThat(selected.text()).isEqualTo("Story");
+
+        ParsedArticle allowed = parser.parse(rss.getBytes(StandardCharsets.UTF_8), "fallback", true).get(0);
+        assertThat(allowed.description()).contains("Full body only.");
+        assertThat(allowed.rssContentAiAllowed()).isTrue();
+        article.setDescription(allowed.description());
+        article.setRssContentAiAllowed(true);
+        assertThat(ArticleSourceMaterial.fromFeed(article).type()).isEqualTo(ArticleSourceMaterial.Type.RSS_CONTENT);
     }
 
     @Test

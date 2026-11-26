@@ -38,7 +38,7 @@ public record ArticleDetailDto(
                 article.getCategory() == null ? null : article.getCategory().getName(),
                 article.getImageUrl(),
                 bookmarked,
-                ExplanationDto.from(explanation),
+                ExplanationDto.from(explanation, article),
                 usefulness,
                 researchSummary
         );

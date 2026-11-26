@@ -39,6 +39,15 @@ class ExplanationDtoTest {
         assertThat(dto.claims().get(0).evidence()).isEqualTo("We study this in 56 interactive worlds.");
     }
 
+    @Test
+    void legacyNoActionFallbackDoesNotClaimTheSourceSaysNoActionIsRequired() {
+        ArticleExplanation explanation = explanation();
+        explanation.setRecommendedAction("No specific action is required. This update is mainly for your understanding.");
+
+        assertThat(ExplanationDto.from(explanation).recommendedAction())
+                .isEqualTo("Not available in the provided text.");
+    }
+
     private ArticleExplanation explanation() {
         ArticleExplanation explanation = new ArticleExplanation();
         explanation.setGeneratedBy(ArticleExplanation.GeneratedBy.BASIC);

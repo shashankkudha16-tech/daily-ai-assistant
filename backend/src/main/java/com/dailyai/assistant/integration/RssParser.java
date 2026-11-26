@@ -27,6 +27,10 @@ public class RssParser {
      * when the feed has no date the value stays null.
      */
     public List<ParsedArticle> parse(byte[] body, String configuredSource) throws Exception {
+        return parse(body, configuredSource, false);
+    }
+
+    public List<ParsedArticle> parse(byte[] body, String configuredSource, boolean allowAiContent) throws Exception {
         SyndFeedInput input = new SyndFeedInput();
         input.setAllowDoctypes(true);
 
@@ -54,10 +58,13 @@ public class RssParser {
                 continue;
             }
 
+            String rssContent = findFullContent(entry);
             String description = entry.getDescription() != null
-                    ? entry.getDescription().getValue()
-                    : firstContent(entry);
+                    ? entry.getDescription().getValue() : (allowAiContent ? rssContent : null);
             description = TextUtils.truncate(TextUtils.cleanHtml(description), 2000);
+            rssContent = TextUtils.cleanHtml(rssContent);
+            boolean rssContentTruncated = rssContent != null && rssContent.length() > 30000;
+            rssContent = TextUtils.truncate(rssContent, 30000);
 
             Instant published = null;
             if (entry.getPublishedDate() != null) {
@@ -70,7 +77,8 @@ public class RssParser {
 
             String image = findImage(entry);
             ParsedArticle article = new ParsedArticle(title.trim(), link, description, published,
-                    TextUtils.truncate(feedTitle, 200), TextUtils.truncate(author, 300), image);
+                    TextUtils.truncate(feedTitle, 200), TextUtils.truncate(author, 300), image, rssContent,
+                    rssContentTruncated, allowAiContent);
             byUrl.putIfAbsent(link, article);
         }
 
@@ -106,11 +114,25 @@ public class RssParser {
         return null;
     }
 
-    private String firstContent(SyndEntry entry) {
-        return entry.getContents().stream()
-                .findFirst()
-                .map(content -> content.getValue())
-                .orElse(null);
+    private String findFullContent(SyndEntry entry) {
+        if (entry.getContents() != null) {
+            for (var content : entry.getContents()) {
+                if (content != null && content.getValue() != null && !content.getValue().isBlank()) {
+                    return content.getValue();
+                }
+            }
+        }
+        List<Element> foreign = entry.getForeignMarkup();
+        if (foreign != null) {
+            for (Element element : foreign) {
+                if ("encoded".equalsIgnoreCase(element.getName())
+                        && element.getNamespaceURI() != null
+                        && element.getNamespaceURI().contains("purl.org/rss/1.0/modules/content")) {
+                    return element.getText();
+                }
+            }
+        }
+        return null;
     }
 
     private String findImage(SyndEntry entry) {

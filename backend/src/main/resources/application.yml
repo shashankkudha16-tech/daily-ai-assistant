@@ -90,21 +90,27 @@ app:
       - name: OpenAI News
         url: https://openai.com/news/rss.xml
         category: generative-ai
+        allow-ai-content: ${RSS_OPENAI_NEWS_ALLOW_AI_CONTENT:false}
       - name: Google DeepMind
         url: https://deepmind.google/blog/rss.xml
         category: ai-research
+        allow-ai-content: ${RSS_DEEPMIND_ALLOW_AI_CONTENT:false}
       - name: Google AI Blog
         url: https://blog.google/technology/ai/rss/
         category: machine-learning
+        allow-ai-content: ${RSS_GOOGLE_AI_ALLOW_AI_CONTENT:false}
       - name: Hugging Face Blog
         url: https://huggingface.co/blog/feed.xml
         category: ai-tools
+        allow-ai-content: ${RSS_HUGGING_FACE_ALLOW_AI_CONTENT:false}
       - name: TechCrunch AI
         url: https://techcrunch.com/category/artificial-intelligence/feed/
         category: latest-ai-news
+        allow-ai-content: ${RSS_TECHCRUNCH_ALLOW_AI_CONTENT:false}
       - name: arXiv cs.AI
         url: https://rss.arxiv.org/rss/cs.AI
         category: ai-research
+        allow-ai-content: ${RSS_ARXIV_ALLOW_AI_CONTENT:false}
   ai:
     enabled: ${AI_ENABLED:false}
     # Provider name is for telemetry only; the endpoint stays OpenAI-compatible.
@@ -113,6 +119,10 @@ app:
     api-key: ${AI_API_KEY:}
     model: ${AI_MODEL:openai/gpt-oss-20b}
     timeout-ms: ${AI_TIMEOUT_MS:30000}
+    # Approximate cap (4 characters/token); truncation is sentence-boundary and disclosed.
+    max-source-tokens: ${AI_MAX_SOURCE_TOKENS:4500}
+    # Provides room for all required sections, evidence, and strict-schema JSON output.
+    max-completion-tokens: ${AI_MAX_COMPLETION_TOKENS:4096}
     # Transient failures (429/5xx/timeouts) are retried with bounded exponential backoff.
     max-attempts: ${AI_MAX_ATTEMPTS:2}
     retry-delay-ms: ${AI_RETRY_DELAY_MS:1000}

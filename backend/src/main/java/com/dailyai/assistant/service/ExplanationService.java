@@ -5,6 +5,8 @@ import com.dailyai.assistant.entity.Article;
 import com.dailyai.assistant.entity.ArticleExplanation;
 import com.dailyai.assistant.integration.ExplanationDraft;
 import com.dailyai.assistant.integration.ExplanationProvider;
+import com.dailyai.assistant.integration.ArticleSourceMaterial;
+import com.dailyai.assistant.integration.NarrativeFactualityValidator;
 import com.dailyai.assistant.repository.ArticleExplanationRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -27,15 +29,21 @@ public class ExplanationService {
     private final ExplanationProvider explanationProvider;
     private final ObjectMapper objectMapper;
     private final int retryAfterMinutes;
+    private final PublisherArticleContentPersistenceService publisherContent;
+    private final NarrativeFactualityValidator factualityValidator;
 
     public ExplanationService(ArticleExplanationRepository explanationRepository,
                               ExplanationProvider explanationProvider,
                               ObjectMapper objectMapper,
-                              AppProperties properties) {
+                              AppProperties properties,
+                              PublisherArticleContentPersistenceService publisherContent,
+                              NarrativeFactualityValidator factualityValidator) {
         this.explanationRepository = explanationRepository;
         this.explanationProvider = explanationProvider;
         this.objectMapper = objectMapper;
         this.retryAfterMinutes = Math.max(0, properties.getAi().getRetryAfterMinutes());
+        this.publisherContent = publisherContent;
+        this.factualityValidator = factualityValidator;
     }
 
     /**
@@ -76,6 +84,9 @@ public class ExplanationService {
             if (allowAi) {
                 return upgradeWithAi(explanation, article, false);
             }
+        } else if (allowAi && explanation.getWhyItHappened() == null) {
+            // Existing AI rows are upgraded lazily, one requested article at a time.
+            return upgradeWithAi(explanation, article, false);
         }
         return explanation;
     }
@@ -95,6 +106,9 @@ public class ExplanationService {
         if (!explanationProvider.isEnabled()) {
             return explanation;
         }
+        if (!explanationProvider.isAvailable()) {
+            return explanation;
+        }
         if (!forced && recentlyAttempted(explanation)) {
             log.debug("Skipping AI retry for article {}: attempted at {}", article.getId(),
                     explanation.getAiAttemptedAt());
@@ -103,10 +117,12 @@ public class ExplanationService {
 
         explanation.setAiAttemptedAt(Instant.now());
         explanation.setAiAttempts(explanation.getAiAttempts() + 1);
-        Optional<ExplanationDraft> draft = explanationProvider.generateExplanation(article)
+        ArticleSourceMaterial source = publisherContent.resolve(article);
+        Optional<ExplanationDraft> draft = explanationProvider.generateExplanation(article, source)
+                .map(value -> factualityValidator.validate(value, article, source))
                 .filter(ExplanationDraft::isComplete)
-                .filter(value -> value.hasSourceEvidence(article))
-                .filter(value -> value.hasGroundedSourceFact(article));
+                .filter(value -> value.hasSourceEvidence(article, source))
+                .filter(value -> value.hasGroundedSourceFact(article, source));
 
         if (draft.isEmpty()) {
             // Persist the attempt timestamp so a broken provider does not spend budget
@@ -127,8 +143,13 @@ public class ExplanationService {
         explanation.setWhoBenefits(value.whoBenefits());
         explanation.setUseCases(value.useCases());
         explanation.setTechnicalExplanation(value.technicalExplanation());
+        explanation.setWhyItHappened(value.whyItHappened());
+        explanation.setUsefulToReader(value.usefulToReader());
+        explanation.setRecommendedAction(value.recommendedAction());
+        explanation.setSourceType(source.type().name());
+        explanation.setSourceCompleteness(source.completeness().name());
         explanation.setSourceEvidence(value.sourceEvidence());
-        explanation.setClaimsJson(toJson(value.supportedClaims(article)));
+        explanation.setClaimsJson(toJson(value.supportedClaims(article, source)));
 
         ExplanationDraft.Metadata metadata = value.metadata() == null
                 ? ExplanationDraft.Metadata.none() : value.metadata();
@@ -141,7 +162,7 @@ public class ExplanationService {
         explanation.setGeneratedBy(ArticleExplanation.GeneratedBy.AI);
         explanation.setGeneratedAt(Instant.now());
         log.info("Generated AI explanation for article {} with {} supported claims",
-                article.getId(), value.supportedClaims(article).size());
+                article.getId(), value.supportedClaims(article, source).size());
         return explanationRepository.save(explanation);
     }
 
@@ -164,31 +185,32 @@ public class ExplanationService {
     }
 
     private void fillBasic(ArticleExplanation explanation, Article article) {
-        String slug = article.getCategory() == null ? "latest-ai-news" : article.getCategory().getSlug();
-        String description = article.getDescription();
+        ArticleSourceMaterial source = ArticleSourceMaterial.fromFeed(article);
+        String description = source.text();
 
         explanation.setWhatHappened(basicWhatHappened(description, article.getTitle()));
+        explanation.setWhyItHappened(UNKNOWN);
+        explanation.setImportance(UNKNOWN);
+        explanation.setUsefulToReader(UNKNOWN);
+        explanation.setRecommendedAction(UNKNOWN);
+        explanation.setSourceType(source.type().name());
+        explanation.setSourceCompleteness(source.completeness().name());
 
         explanation.setTechnology(UNKNOWN);
-
-        explanation.setImportance("ai-research".equals(slug)
-                ? "This is a reported research result. It does not show that the result is ready for use in a product. "
-                    + "Check how the study was done and what its limits are."
-                : "This news can help readers follow changes in AI. Check the original article before relying on its claims.");
 
         explanation.setHowItWorks(UNKNOWN);
 
         explanation.setWhereUsed(UNKNOWN);
 
-        explanation.setFresherLearning("Key takeaway: Read the original article to check its details.");
+        explanation.setFresherLearning(UNKNOWN);
 
         explanation.setPracticalExample(UNKNOWN);
 
         explanation.setRelatedTechnologies(UNKNOWN);
 
-        explanation.setWhoBenefits("People following this topic. The feed does not name a specific audience.");
+        explanation.setWhoBenefits(UNKNOWN);
 
-        explanation.setUseCases("The feed does not establish a concrete use case. Read the original article before applying it.");
+        explanation.setUseCases(UNKNOWN);
 
         explanation.setTechnicalExplanation(UNKNOWN);
 
@@ -206,7 +228,7 @@ public class ExplanationService {
     private String basicWhatHappened(String description, String title) {
         String text = description == null ? "" : description.trim();
         if (text.isBlank()) {
-            return "The feed has no summary. The headline says: " + title;
+            return "The publisher did not provide a summary. The headline says: " + title;
         }
         // Feed descriptions can be long; keep fallback text short and avoid inventing a rewrite.
         if (text.length() <= 500) return text;

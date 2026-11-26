@@ -28,6 +28,7 @@ public class NarrativeFactualityValidator {
     public static final String NOT_AVAILABLE = "Not available in the provided text.";
 
     private static final Logger log = LoggerFactory.getLogger(NarrativeFactualityValidator.class);
+    private final SourceClaimVerifier claimVerifier = new SourceClaimVerifier();
 
     private static final Pattern CAPITALIZED_WORD =
             Pattern.compile("\\b\\p{Lu}[\\p{L}\\p{N}-]{1,}\\b");
@@ -85,45 +86,82 @@ public class NarrativeFactualityValidator {
     );
 
     private static final Set<String> FACTUAL_FIELDS = Set.of(
-            "whatHappened", "technology", "howItWorks", "whereUsed",
-            "relatedTechnologies", "technicalExplanation"
+            "whatHappened", "whyItHappened", "importance", "usefulToReader", "recommendedAction",
+            "technology", "howItWorks", "whereUsed", "relatedTechnologies", "technicalExplanation"
     );
 
     public ExplanationDraft validate(ExplanationDraft draft, Article article) {
+        return validate(draft, article, ArticleSourceMaterial.fromFeed(article));
+    }
+
+    public ExplanationDraft validate(ExplanationDraft draft, Article article, ArticleSourceMaterial material) {
         if (draft == null || article == null) {
             return draft;
         }
-        String source = sourceText(article);
+        String source = sourceText(article, material);
         List<ExplanationDraft.Claim> claims = validateClaims(draft.claims(), source);
 
         return new ExplanationDraft(
-                validateField(draft.whatHappened(), "whatHappened", source),
-                validateField(draft.technology(), "technology", source),
-                validateField(draft.importance(), "importance", source),
-                validateField(draft.howItWorks(), "howItWorks", source),
-                validateField(draft.whereUsed(), "whereUsed", source),
-                validateField(draft.fresherLearning(), "fresherLearning", source),
-                validateField(draft.practicalExample(), "practicalExample", source),
-                validateField(draft.relatedTechnologies(), "relatedTechnologies", source),
+                validateField(draft.whatHappened(), "whatHappened", source, claims),
+                validateField(draft.technology(), "technology", source, claims),
+                validateField(draft.importance(), "importance", source, claims),
+                validateField(draft.howItWorks(), "howItWorks", source, claims),
+                validateField(draft.whereUsed(), "whereUsed", source, claims),
+                validateField(draft.fresherLearning(), "fresherLearning", source, claims),
+                validateField(draft.practicalExample(), "practicalExample", source, claims),
+                validateField(draft.relatedTechnologies(), "relatedTechnologies", source, claims),
                 draft.sourceEvidence(),
-                validateField(draft.whoBenefits(), "whoBenefits", source),
-                validateField(draft.useCases(), "useCases", source),
-                validateField(draft.technicalExplanation(), "technicalExplanation", source),
+                validateField(draft.whoBenefits(), "whoBenefits", source, claims),
+                validateField(draft.useCases(), "useCases", source, claims),
+                validateField(draft.technicalExplanation(), "technicalExplanation", source, claims),
+                validateField(draft.whyItHappened(), "whyItHappened", source, claims),
+                validateField(draft.usefulToReader(), "usefulToReader", source, claims),
+                validateField(draft.recommendedAction(), "recommendedAction", source, claims),
                 claims,
                 draft.metadata()
         );
     }
 
-    private String validateField(String value, String field, String source) {
-        if (value == null || value.isBlank() || isPlaceholder(value)) {
+    private String validateField(String value, String field, String source, List<ExplanationDraft.Claim> claims) {
+        if (value == null || value.isBlank() || isPlaceholder(value) || isHonestFallback(field, value)) {
             return value;
         }
-        if (hasUnsupportedAnchor(value, source)
-                || (FACTUAL_FIELDS.contains(field) && hasUnsupportedModality(value, source))) {
-            log.debug("Replacing non-source-grounded AI field {}", field);
+        boolean supportedSentences = sentences(value).stream()
+                .allMatch(sentence -> sentenceSupported(sentence, field, source, claims));
+        boolean unsupportedAnchor = hasUnsupportedAnchor(value, source);
+        boolean unsupportedModality = FACTUAL_FIELDS.contains(field) && hasUnsupportedModality(value, source);
+        if (!supportedSentences || unsupportedAnchor || unsupportedModality) {
+            String reason = unsupportedModality ? "unsupported_modality"
+                    : unsupportedAnchor ? "unsupported_factual_anchor" : "no_sentence_level_support";
+            log.info("AI explanation section rejected field={} reason={}", field, reason);
             return NOT_AVAILABLE;
         }
         return value;
+    }
+
+    private boolean sentenceSupported(String sentence, String field, String source,
+                                      List<ExplanationDraft.Claim> claims) {
+        if (claimVerifier.hasContradictoryContext(source, sentence)) return false;
+        boolean directEvidence = java.util.Arrays.stream(source.split("(?<=[.!?])\\s+"))
+                .anyMatch(sourceSentence -> claimVerifier.supports(sourceSentence, sentence));
+        if (directEvidence) return true;
+        return claims.stream().filter(claim -> field.equals(claim.section()))
+                .anyMatch(claim -> claimVerifier.supports(claim.evidence(), sentence));
+    }
+
+    private List<String> sentences(String value) {
+        return java.util.Arrays.stream(value.split("(?<=[.!?])\\s+"))
+                .map(String::trim).filter(sentence -> !sentence.isBlank()).toList();
+    }
+
+    private boolean isHonestFallback(String field, String value) {
+        return switch (field) {
+            case "whyItHappened" -> value.equals("The article does not say why this happened.");
+            case "importance" -> value.equals("The available source does not explain why this update is important.");
+            case "usefulToReader" -> value.equals("The available source does not describe a specific personal benefit.")
+                    || value.equals("The article does not describe a specific personal benefit.");
+            default -> false;
+        };
     }
 
     private List<ExplanationDraft.Claim> validateClaims(List<ExplanationDraft.Claim> claims, String source) {
@@ -132,24 +170,30 @@ public class NarrativeFactualityValidator {
         }
         List<ExplanationDraft.Claim> valid = new ArrayList<>();
         for (ExplanationDraft.Claim claim : claims) {
-            if (claim == null || claim.statement() == null || claim.statement().isBlank()
-                    || claim.evidence() == null || claim.evidence().isBlank()
-                    || hasUnsupportedAnchor(claim.statement(), source)) {
+            String rejectionReason = null;
+            if (claim == null) {
+                rejectionReason = "empty_claim";
+            } else if (claim.kind() == ExplanationDraft.Claim.Kind.INTERPRETATION) {
+                rejectionReason = "interpretation_not_source_fact";
+            } else if (claim.statement() == null || claim.statement().isBlank()
+                    || claim.evidence() == null || claim.evidence().isBlank()) {
+                rejectionReason = "missing_statement_or_evidence";
+            } else if (hasUnsupportedAnchor(claim.statement(), source)) {
+                rejectionReason = "unsupported_factual_anchor";
+            } else if (!SourceTextMatcher.contains(source, claim.evidence())) {
+                rejectionReason = "evidence_not_in_source";
+            } else if (!claimVerifier.supports(claim.evidence(), claim.statement())) {
+                rejectionReason = "evidence_does_not_entail_statement";
+            } else if (claimVerifier.hasContradictoryContext(source, claim.statement())) {
+                rejectionReason = "contradictory_source_context";
+            }
+            if (rejectionReason != null) {
+                log.info("AI explanation claim rejected section={} reason={}",
+                        claim == null || claim.section() == null ? "unspecified" : claim.section(), rejectionReason);
                 continue;
             }
-            ExplanationDraft.Claim.Kind kind = claim.kind() == null
-                    ? ExplanationDraft.Claim.Kind.SOURCE_FACT : claim.kind();
-            // Strong wording that is not in the publisher text is interpretation,
-            // not a source fact. Keep the claim visible, but label it honestly.
-            if (kind == ExplanationDraft.Claim.Kind.SOURCE_FACT
-                    && hasUnsupportedModality(claim.statement(), source)) {
-                kind = ExplanationDraft.Claim.Kind.INTERPRETATION;
-            }
-            if (kind != ExplanationDraft.Claim.Kind.SOURCE_FACT
-                    && kind != ExplanationDraft.Claim.Kind.INTERPRETATION) {
-                continue;
-            }
-            valid.add(new ExplanationDraft.Claim(claim.section(), kind, claim.statement(), claim.evidence()));
+            valid.add(new ExplanationDraft.Claim(claim.section(), ExplanationDraft.Claim.Kind.SOURCE_FACT,
+                    claim.statement(), claim.evidence()));
         }
         return valid;
     }
@@ -227,9 +271,9 @@ public class NarrativeFactualityValidator {
                 || lower.startsWith("not available in the supplied text");
     }
 
-    private String sourceText(Article article) {
+    private String sourceText(Article article, ArticleSourceMaterial material) {
         String title = article.getTitle() == null ? "" : article.getTitle();
-        String description = article.getDescription() == null ? "" : article.getDescription();
-        return (title + " " + description).toLowerCase(Locale.ROOT);
+        String source = material == null ? "" : material.text();
+        return (title + ". " + source).toLowerCase(Locale.ROOT);
     }
 }
