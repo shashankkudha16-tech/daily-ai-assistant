@@ -38,7 +38,7 @@ class NewsControllerTest {
     @Test
     void latestReturnsArticleList() throws Exception {
         ArticleDto article = new ArticleDto(1L, "AI update", "https://example.com/1", "desc",
-                "Source", "Jane Doe", Instant.parse("2026-11-16T10:00:00Z"), "generative-ai",
+                "Source", "GLOBAL", "Jane Doe", Instant.parse("2026-11-16T10:00:00Z"), "generative-ai",
                 "Generative AI", null, false, null);
         when(articleService.latest(5)).thenReturn(List.of(article));
 

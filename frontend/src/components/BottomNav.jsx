@@ -3,11 +3,13 @@ import { HomeIcon, CompassIcon, BookIcon, BookmarkIcon, UserIcon } from './Icons
 import { useAuth } from '../auth/AuthContext.jsx';
 
 const items = [
-  { to: '/', label: 'Home', Icon: HomeIcon, end: true },
-  { to: '/discover', label: 'Discover', Icon: CompassIcon },
-  { to: '/learn', label: 'Learn', Icon: BookIcon },
-  { to: '/bookmarks', label: 'Saved', Icon: BookmarkIcon },
-  { to: '/profile', label: 'Profile', Icon: UserIcon },
+  { to: '/', label: 'Dashboard', Icon: HomeIcon, end: true },
+  { to: '/mentor', label: 'AI Mentor', Icon: UserIcon },
+  { to: '/discover', label: 'Daily News', Icon: CompassIcon },
+  { to: '/learn', label: 'Learning Plan', Icon: BookIcon },
+  { to: '/progress', label: 'My Progress', Icon: UserIcon },
+  { to: '/history', label: 'History', Icon: BookmarkIcon },
+  { to: '/settings', label: 'Settings', Icon: UserIcon },
 ];
 
 export default function BottomNav() {

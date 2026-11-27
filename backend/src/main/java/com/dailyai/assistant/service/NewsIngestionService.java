@@ -172,6 +172,8 @@ public class NewsIngestionService {
         article.setSource(candidate.source() == null || candidate.source().isBlank()
                 ? feed.getName()
                 : candidate.source());
+        article.setRegion(feed.getRegion() == null || feed.getRegion().isBlank()
+                ? "UNKNOWN" : feed.getRegion().trim().toUpperCase(java.util.Locale.ROOT));
         article.setAuthor(candidate.author());
         article.setPublishedAt(candidate.publishedAt());
         article.setImageUrl(truncate(candidate.imageUrl(), 1000));

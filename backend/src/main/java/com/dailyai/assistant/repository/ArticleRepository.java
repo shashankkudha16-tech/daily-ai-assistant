@@ -4,14 +4,13 @@ import com.dailyai.assistant.entity.Article;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
-public interface ArticleRepository extends JpaRepository<Article, Long> {
+public interface ArticleRepository extends JpaRepository<Article, Long>, JpaSpecificationExecutor<Article> {
 
     Optional<Article> findByUrl(String url);
 
@@ -25,26 +24,12 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
 
     List<Article> findByPublishedAtIsNotNullOrderByPublishedAtDesc(Pageable pageable);
 
+    List<Article> findByRegionAndPublishedAtIsNotNullOrderByPublishedAtDesc(String region, Pageable pageable);
+
     long countByPublishedAtAfter(Instant from);
 
     long countByFetchedAtAfter(Instant from);
 
     long countByCategorySlug(String slug);
 
-    @Query("""
-            select a from Article a
-            where lower(a.title) like lower(concat('%', :q, '%'))
-               or lower(coalesce(a.description, '')) like lower(concat('%', :q, '%'))
-               or lower(coalesce(a.source, '')) like lower(concat('%', :q, '%'))
-            """)
-    Page<Article> search(@Param("q") String query, Pageable pageable);
-
-    @Query("""
-            select a from Article a
-            where (lower(a.title) like lower(concat('%', :q, '%'))
-               or lower(coalesce(a.description, '')) like lower(concat('%', :q, '%'))
-               or lower(coalesce(a.source, '')) like lower(concat('%', :q, '%')))
-              and a.category.slug = :category
-            """)
-    Page<Article> searchInCategory(@Param("q") String query, @Param("category") String category, Pageable pageable);
 }

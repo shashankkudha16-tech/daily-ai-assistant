@@ -11,6 +11,9 @@ import ProfilePage from './pages/ProfilePage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
+import ProgressPage from './pages/ProgressPage.jsx';
+import HistoryPage from './pages/HistoryPage.jsx';
+import MentorPage from './pages/MentorPage.jsx';
 import { ProtectedRoute, PublicOnlyRoute } from './auth/ProtectedRoute.jsx';
 
 function initialTheme() {
@@ -39,6 +42,10 @@ export default function App() {
         <Route path="news/:id" element={<ArticlePage />} />
         <Route path="learn" element={<ProtectedRoute><LearnPage /></ProtectedRoute>} />
         <Route path="learn/:id" element={<ProtectedRoute><TopicPage /></ProtectedRoute>} />
+        <Route path="progress" element={<ProtectedRoute><ProgressPage /></ProtectedRoute>} />
+        <Route path="mentor" element={<ProtectedRoute><MentorPage /></ProtectedRoute>} />
+        <Route path="history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
+        <Route path="settings" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="bookmarks" element={<ProtectedRoute><BookmarksPage /></ProtectedRoute>} />
         <Route path="profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="*" element={<NotFoundPage />} />

@@ -65,7 +65,7 @@ class ArticleServiceTest {
     void listMarksBookmarkedArticlesAndSortsNewest() {
         Article article = article(1L, "News", "generative-ai", Instant.parse("2026-11-16T00:00:00Z"));
         Page<Article> page = new PageImpl<>(List.of(article));
-        when(articleRepository.findAll(any(Pageable.class))).thenReturn(page);
+        when(articleRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), any(Pageable.class))).thenReturn(page);
         when(bookmarkService.bookmarkedIds(Bookmark.ItemType.ARTICLE)).thenReturn(Set.of(1L));
 
         PageResponse<ArticleDto> response = service.list("all", "newest", 0, 12);
@@ -75,9 +75,19 @@ class ArticleServiceTest {
         assertThat(response.totalElements()).isEqualTo(1);
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(articleRepository).findAll(captor.capture());
+        verify(articleRepository).findAll(any(org.springframework.data.jpa.domain.Specification.class), captor.capture());
         assertThat(captor.getValue().getSort().getOrderFor("publishedAt").getDirection())
                 .isEqualTo(Sort.Direction.DESC);
+    }
+
+    @Test
+    void filtersNewsBySourceRegionAndRejectsUnknownRegions() {
+        when(articleRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), any(Pageable.class)))
+                .thenReturn(Page.empty());
+        service.list("all", "india", "today", "newest", 0, 12);
+        verify(articleRepository).findAll(any(org.springframework.data.jpa.domain.Specification.class), any(Pageable.class));
+        assertThatThrownBy(() -> service.list("all", "mars", "today", "newest", 0, 12))
+                .isInstanceOf(com.dailyai.assistant.exception.BadRequestException.class);
     }
 
     @Test

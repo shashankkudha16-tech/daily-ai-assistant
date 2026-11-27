@@ -164,6 +164,7 @@ public class AppProperties {
         private String url;
         private String category;
         private boolean allowAiContent;
+        private String region = "UNKNOWN";
 
         public String getName() {
             return name;
@@ -191,6 +192,8 @@ public class AppProperties {
 
         public boolean isAllowAiContent() { return allowAiContent; }
         public void setAllowAiContent(boolean allowAiContent) { this.allowAiContent = allowAiContent; }
+        public String getRegion() { return region; }
+        public void setRegion(String region) { this.region = region; }
     }
 
     public static class Auth {
@@ -263,6 +266,8 @@ public class AppProperties {
         public boolean isEnabled() {
             return enabled && apiKey != null && !apiKey.isBlank();
         }
+
+        public boolean isEnabledConfigured() { return enabled; }
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;

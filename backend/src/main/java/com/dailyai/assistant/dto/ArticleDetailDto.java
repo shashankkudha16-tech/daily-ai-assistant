@@ -11,6 +11,7 @@ public record ArticleDetailDto(
         String url,
         String description,
         String source,
+        String region,
         String author,
         Instant publishedAt,
         Instant fetchedAt,
@@ -30,6 +31,7 @@ public record ArticleDetailDto(
                 article.getUrl(),
                 article.getDescription(),
                 article.getSource(),
+                article.getRegion(),
                 article.getAuthor() == null || article.getAuthor().isBlank()
                         ? "Author unavailable" : article.getAuthor(),
                 article.getPublishedAt(),

@@ -10,6 +10,7 @@ import com.dailyai.assistant.entity.User;
 import com.dailyai.assistant.exception.BadRequestException;
 import com.dailyai.assistant.exception.ResourceNotFoundException;
 import com.dailyai.assistant.repository.ArticleRepository;
+import com.dailyai.assistant.repository.ArticleSpecifications;
 import com.dailyai.assistant.repository.CategoryRepository;
 import com.dailyai.assistant.repository.ReadingHistoryRepository;
 import org.springframework.data.domain.Page;
@@ -60,16 +61,17 @@ public class ArticleService {
 
     @Transactional(readOnly = true)
     public PageResponse<ArticleDto> list(String category, String sort, int page, int size) {
+        return list(category, null, null, sort, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<ArticleDto> list(String category, String region, String period, String sort, int page, int size) {
         Pageable pageable = pageable(page, size, sort);
         Set<Long> bookmarked = bookmarkService.bookmarkedIds(Bookmark.ItemType.ARTICLE);
-
-        Page<Article> result;
-        if (category == null || category.isBlank() || "all".equalsIgnoreCase(category)) {
-            result = articleRepository.findAll(pageable);
-        } else {
-            String slug = requireCategory(category);
-            result = articleRepository.findByCategorySlug(slug, pageable);
-        }
+        String slug = category == null || category.isBlank() || "all".equalsIgnoreCase(category)
+                ? null : requireCategory(category);
+        Page<Article> result = articleRepository.findAll(
+                ArticleSpecifications.filters(slug, normalizeRegion(region), periodStart(period), null), pageable);
         return PageResponse.from(result, article -> toDto(article, bookmarked.contains(article.getId())));
     }
 
@@ -87,6 +89,16 @@ public class ArticleService {
         return articles.stream()
                 .map(article -> toDto(article, bookmarked.contains(article.getId())))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ArticleDto> latestForRegion(String region, int limit) {
+        String safeRegion = normalizeRegion(region);
+        int safeLimit = Math.max(1, Math.min(limit, MAX_PAGE_SIZE));
+        List<Article> page = articleRepository.findByRegionAndPublishedAtIsNotNullOrderByPublishedAtDesc(safeRegion,
+                PageRequest.of(0, safeLimit));
+        Set<Long> bookmarked = bookmarkService.bookmarkedIds(Bookmark.ItemType.ARTICLE);
+        return page.stream().map(article -> toDto(article, bookmarked.contains(article.getId()))).toList();
     }
 
     @Transactional
@@ -110,21 +122,40 @@ public class ArticleService {
 
     @Transactional(readOnly = true)
     public PageResponse<ArticleDto> search(String query, String category, String sort, int page, int size) {
+        return search(query, category, null, null, sort, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<ArticleDto> search(String query, String category, String region, String period, String sort, int page, int size) {
         if (query == null || query.isBlank()) {
-            return list(category, sort, page, size);
+            return list(category, region, period, sort, page, size);
         }
         Pageable pageable = pageable(page, size, sort);
         String trimmed = query.trim();
         Set<Long> bookmarked = bookmarkService.bookmarkedIds(Bookmark.ItemType.ARTICLE);
 
-        Page<Article> result;
-        if (category == null || category.isBlank() || "all".equalsIgnoreCase(category)) {
-            result = articleRepository.search(trimmed, pageable);
-        } else {
-            String slug = requireCategory(category);
-            result = articleRepository.searchInCategory(trimmed, slug, pageable);
-        }
+        String slug = category == null || category.isBlank() || "all".equalsIgnoreCase(category)
+                ? null : requireCategory(category);
+        Page<Article> result = articleRepository.findAll(
+                ArticleSpecifications.filters(slug, normalizeRegion(region), periodStart(period), trimmed), pageable);
         return PageResponse.from(result, article -> toDto(article, bookmarked.contains(article.getId())));
+    }
+
+    private String normalizeRegion(String region) {
+        if (region == null || region.isBlank() || "all".equalsIgnoreCase(region)) return null;
+        String value = region.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!value.equals("INDIA") && !value.equals("GLOBAL")) throw new BadRequestException("region must be India or Global");
+        return value;
+    }
+
+    private Instant periodStart(String period) {
+        if (period == null || period.isBlank() || "all".equalsIgnoreCase(period)) return null;
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        return switch (period.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "today" -> today.atStartOfDay(java.time.ZoneId.of("Asia/Kolkata")).toInstant();
+            case "week" -> today.minusDays(6).atStartOfDay(java.time.ZoneId.of("Asia/Kolkata")).toInstant();
+            default -> throw new BadRequestException("period must be today or week");
+        };
     }
 
     public ArticleDto toDto(Article article, boolean bookmarked) {

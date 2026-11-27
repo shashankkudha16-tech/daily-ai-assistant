@@ -19,7 +19,10 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.flyway.enabled=true",
         // V12 adds a PostgreSQL-only partial unique index that H2 cannot parse.
         "spring.flyway.target=11",
-        "spring.jpa.hibernate.ddl-auto=none",
+        // This H2-only legacy bootstrap fixture intentionally stops before V12 because
+        // that migration creates a PostgreSQL partial index. Keep the fixture's entity
+        // schema aligned with the current User mapping while exercising the old rows.
+        "spring.jpa.hibernate.ddl-auto=update",
         "spring.task.scheduling.enabled=false",
         "app.rss.fetch-on-startup=false",
         "app.auth.bootstrap-email=fresher@dailyai.local",

@@ -37,6 +37,9 @@ export const getTopic = (id) => client.get(`/api/learning/topics/${id}`).then((r
 export const updateProgress = (topicId, status) =>
   client.post('/api/learning/progress', { topicId, status }).then((r) => r.data);
 export const getDailyPlan = () => client.get('/api/learning/daily-plan').then((r) => r.data);
+export const createOrLoadPersonalPlanToday = () => client.post('/api/learning/personal-plan/today').then((r) => r.data);
+export const getPersonalPlanHistory = () => client.get('/api/learning/personal-plan/history').then((r) => r.data);
+export const updatePersonalPlanStatus = (id, status) => client.patch(`/api/learning/personal-plan/${id}/status`, { status }).then((r) => r.data);
 export const completeDailyTask = (taskId, completed = true) =>
   client
     .post(`/api/learning/daily-plan/${taskId}`, null, { params: { completed } })
@@ -56,9 +59,26 @@ export const removeBookmark = (itemType, itemId) =>
 export const getProfile = () => client.get('/api/profile').then((r) => r.data);
 export const updateProfilePreferences = (preferences) =>
   client.put('/api/profile/preferences', { preferences }).then((r) => r.data);
+export const updateProfileCareerContext = (careerGoal, targetRoles) =>
+  client.put('/api/profile/career', { careerGoal, targetRoles }).then((r) => r.data);
 export const updateProfileName = (name) =>
   client.put('/api/profile', { name }).then((r) => r.data);
 export const getHistory = (limit = 20) =>
   client.get('/api/profile/history', { params: { limit } }).then((r) => r.data);
+
+export const getProgressEntries = () => client.get('/api/progress/entries').then((r) => r.data);
+export const getProgressEntry = (date) => client.get(`/api/progress/entries/${date}`).then((r) => r.data);
+export const saveProgressEntry = (date, entry) =>
+  client.put(`/api/progress/entries/${date}`, entry).then((r) => r.data);
+export const uploadProgressAttachment = (date, file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return client.post(`/api/progress/entries/${date}/attachment`, form).then((r) => r.data);
+};
+export const removeProgressAttachment = (date) =>
+  client.delete(`/api/progress/entries/${date}/attachment`);
+export const getMentorReview = () => client.get('/api/mentor/review').then((r) => r.data);
+export const getMentorHistory = () => client.get('/api/mentor/history').then((r) => r.data);
+export const generateMentorReview = () => client.post('/api/mentor/review').then((r) => r.data);
 
 export const refreshNews = () => client.post('/api/admin/news/refresh').then((r) => r.data);

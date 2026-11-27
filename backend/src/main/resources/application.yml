@@ -1,6 +1,10 @@
 spring:
   application:
     name: daily-ai-assistant
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/dailyai}
     username: ${DB_USERNAME:dailyai}
@@ -91,26 +95,37 @@ app:
         url: https://openai.com/news/rss.xml
         category: generative-ai
         allow-ai-content: ${RSS_OPENAI_NEWS_ALLOW_AI_CONTENT:false}
+        region: GLOBAL
       - name: Google DeepMind
         url: https://deepmind.google/blog/rss.xml
         category: ai-research
         allow-ai-content: ${RSS_DEEPMIND_ALLOW_AI_CONTENT:false}
+        region: GLOBAL
       - name: Google AI Blog
         url: https://blog.google/technology/ai/rss/
         category: machine-learning
         allow-ai-content: ${RSS_GOOGLE_AI_ALLOW_AI_CONTENT:false}
+        region: GLOBAL
       - name: Hugging Face Blog
         url: https://huggingface.co/blog/feed.xml
         category: ai-tools
         allow-ai-content: ${RSS_HUGGING_FACE_ALLOW_AI_CONTENT:false}
+        region: GLOBAL
       - name: TechCrunch AI
         url: https://techcrunch.com/category/artificial-intelligence/feed/
         category: latest-ai-news
         allow-ai-content: ${RSS_TECHCRUNCH_ALLOW_AI_CONTENT:false}
+        region: GLOBAL
       - name: arXiv cs.AI
         url: https://rss.arxiv.org/rss/cs.AI
         category: ai-research
         allow-ai-content: ${RSS_ARXIV_ALLOW_AI_CONTENT:false}
+        region: GLOBAL
+      - name: Press Information Bureau India
+        url: https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=1
+        category: india-updates
+        allow-ai-content: ${RSS_PIB_ALLOW_AI_CONTENT:false}
+        region: INDIA
   ai:
     enabled: ${AI_ENABLED:false}
     # Provider name is for telemetry only; the endpoint stays OpenAI-compatible.

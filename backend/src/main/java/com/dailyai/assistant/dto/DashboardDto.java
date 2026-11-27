@@ -14,7 +14,10 @@ public record DashboardDto(
         DailyTaskDto todayTask,
         LearningTopicDto continueLearning,
         int streakDays,
-        Stats stats
+        Stats stats,
+        String yesterdayProgress,
+        String todayGoals,
+        List<String> developingSkills
 ) {
     public record Stats(
             long articlesToday,

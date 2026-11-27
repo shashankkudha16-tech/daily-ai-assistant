@@ -21,6 +21,8 @@ export default function DiscoverPage() {
   const [queryInput, setQueryInput] = useState('');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
+  const [region, setRegion] = useState('all');
+  const [period, setPeriod] = useState('all');
   const [sort, setSort] = useState('newest');
   const [page, setPage] = useState(0);
 
@@ -37,8 +39,8 @@ export default function DiscoverPage() {
   const toolCategories = useAsync(getToolCategories, []);
 
   const news = useAsync(
-    () => (query ? searchNews({ q: query, category, sort, page, size: 10 }) : getNews({ category, sort, page, size: 10 })),
-    [query, category, sort, page]
+    () => (query ? searchNews({ q: query, category, region, period, sort, page, size: 10 }) : getNews({ category, region, period, sort, page, size: 10 })),
+    [query, category, region, period, sort, page]
   );
 
   const tools = useAsync(
@@ -137,6 +139,22 @@ export default function DiscoverPage() {
 
           <div className="filter-row">
             <span className="muted small">{query ? `Results for “${query}”` : 'All collected articles'}</span>
+            <label className="select-label">
+              Source region
+              <select value={region} onChange={(event) => { setRegion(event.target.value); setPage(0); }}>
+                <option value="all">India + global</option>
+                <option value="INDIA">India source</option>
+                <option value="GLOBAL">Global source</option>
+              </select>
+            </label>
+            <label className="select-label">
+              Published
+              <select value={period} onChange={(event) => { setPeriod(event.target.value); setPage(0); }}>
+                <option value="all">Any time</option>
+                <option value="today">Today</option>
+                <option value="week">This week</option>
+              </select>
+            </label>
             <label className="select-label">
               Sort
               <select value={sort} onChange={(event) => { setSort(event.target.value); setPage(0); }}>

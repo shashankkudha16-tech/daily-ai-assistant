@@ -26,6 +26,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -38,6 +39,8 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -103,6 +106,8 @@ class AuthApiIntegrationTest {
     @Test
     void unauthenticatedPersonalApisAreRejectedButPublicNewsRemainsReadable() throws Exception {
         mockMvc.perform(get("/api/profile")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/progress/entries")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/mentor/review")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/bookmarks")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/learning/roadmap")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/dashboard")).andExpect(status().isUnauthorized());
@@ -518,6 +523,107 @@ class AuthApiIntegrationTest {
         mockMvc.perform(get("/api/learning/daily-plan").session(bob))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.days[0].tasks[0].completedInPlan").value(false));
+    }
+
+    @Test
+    void progressJournalRequiresAuthenticationAndEntriesAreIsolatedByOwnerAndDate() throws Exception {
+        MockHttpSession alice = register("Alice Journal", "alice.journal@example.com");
+        MockHttpSession bob = register("Bob Journal", "bob.journal@example.com");
+        String date = "2026-11-20";
+
+        Csrf aliceCsrf = csrf(alice);
+        mockMvc.perform(put("/api/progress/entries/" + date)
+                        .session(alice)
+                        .header("X-XSRF-TOKEN", aliceCsrf.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"learned\":\"Built a REST endpoint\",\"practiced\":\"Wrote tests\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.learned").value("Built a REST endpoint"));
+
+        Csrf updateCsrf = csrf(alice);
+        mockMvc.perform(put("/api/progress/entries/" + date)
+                        .session(alice)
+                        .header("X-XSRF-TOKEN", updateCsrf.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"learned\":\"Updated learning note\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.learned").value("Updated learning note"));
+
+        mockMvc.perform(get("/api/progress/entries").session(alice))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+        mockMvc.perform(get("/api/progress/entries").session(bob))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+
+        Csrf uploadCsrf = csrf(alice);
+        MockMultipartFile notes = new MockMultipartFile("file", "practice.txt", "text/plain",
+                "Practiced Java collections".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        mockMvc.perform(multipart("/api/progress/entries/" + date + "/attachment")
+                        .file(notes).session(alice).header("X-XSRF-TOKEN", uploadCsrf.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.attachmentText").value("Practiced Java collections"));
+
+        Csrf bobCsrf = csrf(bob);
+        mockMvc.perform(put("/api/progress/entries/" + date)
+                        .session(bob)
+                        .header("X-XSRF-TOKEN", bobCsrf.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"learned\":\"Separate private note\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/progress/entries").session(bob))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].learned").value("Separate private note"));
+    }
+
+    @Test
+    void careerSettingsArePersistedOnlyForTheirAccount() throws Exception {
+        MockHttpSession alice = register("Alice Career", "alice.career@example.com");
+        MockHttpSession bob = register("Bob Career", "bob.career@example.com");
+        Csrf aliceCsrf = csrf(alice);
+        mockMvc.perform(put("/api/profile/career")
+                        .session(alice)
+                        .header("X-XSRF-TOKEN", aliceCsrf.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"careerGoal\":\"Prepare for backend work\",\"targetRoles\":\"Java developer\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.careerGoal").value("Prepare for backend work"))
+                .andExpect(jsonPath("$.targetRoles").value("Java developer"));
+        mockMvc.perform(get("/api/profile").session(bob))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.careerGoal").value(""))
+                .andExpect(jsonPath("$.targetRoles").value(""));
+    }
+
+    @Test
+    void personalPlanRequiresAuthenticationAndIsScopedToItsOwner() throws Exception {
+        mockMvc.perform(get("/api/learning/personal-plan/today"))
+                .andExpect(status().isUnauthorized());
+        MockHttpSession alice = register("Alice Plan", "alice.plan@example.com");
+        MockHttpSession bob = register("Bob Plan", "bob.plan@example.com");
+        Csrf aliceCsrf = csrf(alice);
+        MvcResult generated = mockMvc.perform(post("/api/learning/personal-plan/today").session(alice)
+                        .header("X-XSRF-TOKEN", aliceCsrf.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].section").value("LEARN"))
+                .andExpect(jsonPath("$[0].rationale").isNotEmpty())
+                .andExpect(jsonPath("$[0].dueDate").isNotEmpty()).andReturn();
+        long aliceItemId = objectMapper.readTree(generated.getResponse().getContentAsString()).get(0).get("id").asLong();
+        mockMvc.perform(get("/api/learning/personal-plan/today").session(bob))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        mockMvc.perform(get("/api/learning/personal-plan/history").session(bob))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        Csrf bobCsrf = csrf(bob);
+        mockMvc.perform(patch("/api/learning/personal-plan/" + aliceItemId + "/status").session(bob)
+                        .header("X-XSRF-TOKEN", bobCsrf.token()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"COMPLETED\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void newsRegionAndPublicationPeriodFiltersAreAccepted() throws Exception {
+        mockMvc.perform(get("/api/news").param("region", "INDIA").param("period", "today"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/news/search").param("q", "AI").param("region", "GLOBAL").param("period", "week"))
+                .andExpect(status().isOk());
     }
 
     @Test

@@ -21,6 +21,12 @@ public class User {
     @Column(nullable = false, length = 500)
     private String preferences = "";
 
+    @Column(name = "career_goal", nullable = false, columnDefinition = "text default ''")
+    private String careerGoal = "";
+
+    @Column(name = "target_roles", nullable = false, columnDefinition = "text default ''")
+    private String targetRoles = "";
+
     @Column(name = "password_hash", length = 100)
     private String passwordHash;
 
@@ -71,6 +77,10 @@ public class User {
 
     public String getPreferences() { return preferences; }
     public void setPreferences(String preferences) { this.preferences = preferences == null ? "" : preferences; }
+    public String getCareerGoal() { return careerGoal; }
+    public void setCareerGoal(String careerGoal) { this.careerGoal = careerGoal == null ? "" : careerGoal; }
+    public String getTargetRoles() { return targetRoles; }
+    public void setTargetRoles(String targetRoles) { this.targetRoles = targetRoles == null ? "" : targetRoles; }
     public java.util.List<String> getPreferenceList() {
         return preferences == null || preferences.isBlank() ? java.util.List.of()
                 : java.util.Arrays.stream(preferences.split(",")).filter(value -> !value.isBlank()).toList();

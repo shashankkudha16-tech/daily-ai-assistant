@@ -20,7 +20,7 @@ export default function Layout({ theme, onToggleTheme }) {
           </span>
           <div>
             <strong>Daily AI</strong>
-            <span className="brand-subtitle">Updates &amp; learning</span>
+            <span className="brand-subtitle">Understand Today. Improve Tomorrow.</span>
           </div>
         </div>
         {!user && <div className="auth-actions"><Link to="/login">Log in</Link><Link className="button small" to="/register">Sign up</Link></div>}

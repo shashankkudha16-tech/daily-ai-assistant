@@ -79,10 +79,17 @@ public class DatabaseAiUsageBudget implements AiUsageBudget {
 
     @Override
     public void recordFailure(LocalDate usageDate) {
+        recordFailure(usageDate, 0, 0);
+    }
+
+    @Override
+    public void recordFailure(LocalDate usageDate, int inputTokens, int outputTokens) {
         try {
             transactionTemplate.executeWithoutResult(status -> {
                 AiUsageDaily row = findOrCreate(usageDate);
                 row.setFailures(row.getFailures() + 1);
+                row.setInputTokens(row.getInputTokens() + Math.max(0, inputTokens));
+                row.setOutputTokens(row.getOutputTokens() + Math.max(0, outputTokens));
                 row.setUpdatedAt(Instant.now());
                 repository.saveAndFlush(row);
             });

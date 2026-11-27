@@ -78,7 +78,7 @@ export default function HomePage() {
           {resetError && <p className="muted small" role="alert">{resetError}</p>}
         </section>
         <section>
-          <SectionHeader title="Latest AI news" subtitle="Recent items collected from configured feeds" />
+          <SectionHeader title="India and global news" subtitle="Recent articles from India and international sources" />
           {data.latestNews.length ? <div className="stack tight">{data.latestNews.map((article) => <ArticleCard key={article.id} article={article} />)}</div>
             : <EmptyState title="No news yet" message="New items appear after the next feed refresh." />}
         </section>
@@ -122,6 +122,25 @@ export default function HomePage() {
             <span>saved</span>
           </div>
         </div>
+      </section>
+
+      <section className="dashboard-growth-grid" aria-label="Your growth today">
+        <article className="card">
+          <h2>Yesterday&apos;s progress</h2>
+          {data.yesterdayProgress ? <p>{data.yesterdayProgress}</p> : <p className="muted">No journal entry for yesterday yet.</p>}
+          <Link className="text-link" to="/progress">Open my progress</Link>
+        </article>
+        <article className="card">
+          <h2>Today&apos;s goals</h2>
+          {data.todayGoals ? <p>{data.todayGoals}</p> : <p className="muted">Add tomorrow&apos;s goals in your journal to see them here.</p>}
+          <Link className="text-link" to="/progress">Set a goal</Link>
+        </article>
+        <article className="card">
+          <h2>Skills in progress</h2>
+          {data.developingSkills?.length ? <ul>{data.developingSkills.map((skill) => <li key={skill}>{skill}</li>)}</ul>
+            : <p className="muted">No skills are currently marked in progress on your roadmap.</p>}
+          <Link className="text-link" to="/learn">View learning plan</Link>
+        </article>
       </section>
 
       {todayTask && (
@@ -216,7 +235,7 @@ export default function HomePage() {
       )}
 
       <section>
-        <SectionHeader title="Latest AI news" subtitle="Actual publication dates from each source" />
+        <SectionHeader title="India and global news" subtitle="Recent articles from India and international sources" />
         {latestNews?.length ? (
           <div className="stack tight">
             {latestNews.map((article) => (

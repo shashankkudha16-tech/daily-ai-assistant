@@ -47,6 +47,9 @@ public class Article {
     @Column(length = 200)
     private String source;
 
+    @Column(nullable = false, length = 12)
+    private String region = "UNKNOWN";
+
     @Column(length = 300)
     private String author;
 
@@ -111,6 +114,9 @@ public class Article {
     public String getSource() {
         return source;
     }
+
+    public String getRegion() { return region; }
+    public void setRegion(String region) { this.region = region; }
 
     public void setSource(String source) {
         this.source = source;

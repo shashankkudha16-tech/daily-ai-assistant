@@ -9,6 +9,7 @@ import com.dailyai.assistant.entity.Article;
 import com.dailyai.assistant.entity.Bookmark;
 import com.dailyai.assistant.entity.User;
 import com.dailyai.assistant.repository.ArticleRepository;
+import com.dailyai.assistant.repository.UserProgressEntryRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,7 @@ public class DashboardService {
     private final CurrentUserService currentUserService;
     private final ArticleRepository articleRepository;
     private final AppProperties properties;
+    private final UserProgressEntryRepository progressEntryRepository;
 
     public DashboardService(ArticleService articleService,
                             LearningService learningService,
@@ -39,7 +41,8 @@ public class DashboardService {
                             BookmarkService bookmarkService,
                             CurrentUserService currentUserService,
                             ArticleRepository articleRepository,
-                            AppProperties properties) {
+                            AppProperties properties,
+                            UserProgressEntryRepository progressEntryRepository) {
         this.articleService = articleService;
         this.learningService = learningService;
         this.toolService = toolService;
@@ -47,6 +50,7 @@ public class DashboardService {
         this.currentUserService = currentUserService;
         this.articleRepository = articleRepository;
         this.properties = properties;
+        this.progressEntryRepository = progressEntryRepository;
     }
 
     @Transactional(readOnly = true)
@@ -56,13 +60,20 @@ public class DashboardService {
         Instant startOfToday = LocalDate.now(zone).atStartOfDay(zone).toInstant();
 
         RoadmapDto roadmap = learningService.roadmap();
+        LocalDate yesterday = LocalDate.now(zone).minusDays(1);
+        var yesterdayEntry = progressEntryRepository.findByUserIdAndEntryDate(user.getId(), yesterday).orElse(null);
         int planPercent = learningService.planProgressPercent();
 
         long collectedToday = articleRepository.countByFetchedAtAfter(startOfToday);
         long publishedThisWeek = articleRepository.countByPublishedAtAfter(Instant.now().minusSeconds(7L * 24 * 3600));
 
         List<ArticleDto> topUpdates = articleService.latest(5);
-        List<ArticleDto> latestNews = articleService.latest(12);
+        List<ArticleDto> latestNews = java.util.stream.Stream.concat(
+                        articleService.latestForRegion("INDIA", 6).stream(),
+                        articleService.latestForRegion("GLOBAL", 6).stream())
+                .sorted(java.util.Comparator.comparing(ArticleDto::publishedAt,
+                        java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
+                .limit(12).toList();
         List<ArticleDto> recentModels = recentModels();
         List<ToolDto> trendingTools = toolService.trending(6);
 
@@ -91,8 +102,23 @@ public class DashboardService {
                 learningService.todaysTask(),
                 learningService.continueLearning(),
                 learningService.streakDays(),
-                stats
+                stats,
+                yesterdayEntry == null ? null : combineProgress(yesterdayEntry.getLearned(), yesterdayEntry.getPracticed(), yesterdayEntry.getBuilt()),
+                yesterdayEntry == null || yesterdayEntry.getTomorrowGoals().isBlank() ? null : excerpt(yesterdayEntry.getTomorrowGoals()),
+                roadmap.levels().stream().flatMap(level -> level.topics().stream())
+                        .filter(topic -> "IN_PROGRESS".equals(topic.status())).map(topic -> topic.title()).limit(5).toList()
         );
+    }
+
+    private String combineProgress(String... fields) {
+        String value = java.util.Arrays.stream(fields).filter(field -> field != null && !field.isBlank())
+                .map(this::excerpt).collect(java.util.stream.Collectors.joining(" · "));
+        return value.isBlank() ? null : value;
+    }
+
+    private String excerpt(String value) {
+        String cleaned = value.trim().replaceAll("\\s+", " ");
+        return cleaned.substring(0, Math.min(cleaned.length(), 320));
     }
 
     private List<ArticleDto> recentModels() {

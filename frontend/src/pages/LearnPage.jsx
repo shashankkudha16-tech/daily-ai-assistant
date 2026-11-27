@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { completeDailyTask, getDailyPlan, getRoadmap } from '../api/api.js';
+import { completeDailyTask, createOrLoadPersonalPlanToday, getDailyPlan, getRoadmap, updatePersonalPlanStatus } from '../api/api.js';
 import useAsync from '../hooks/useAsync.js';
 import { EmptyState, ErrorState, SectionHeader, SkeletonList } from '../components/States.jsx';
 import { CheckIcon, ChevronIcon } from '../components/Icons.jsx';
@@ -9,8 +9,11 @@ import { STATUS_LABELS } from '../utils/format.js';
 export default function LearnPage() {
   const roadmap = useAsync(getRoadmap, []);
   const plan = useAsync(getDailyPlan, []);
+  const personalPlan = useAsync(createOrLoadPersonalPlanToday, []);
   const [openLevels, setOpenLevels] = useState({ 1: true });
   const [busyTask, setBusyTask] = useState(null);
+  const [busyPersonalItem, setBusyPersonalItem] = useState(null);
+  const [personalPlanActionError, setPersonalPlanActionError] = useState('');
 
   function toggleLevel(level) {
     setOpenLevels((current) => ({ ...current, [level]: !current[level] }));
@@ -25,6 +28,18 @@ export default function LearnPage() {
     } finally {
       setBusyTask(null);
     }
+  }
+
+  async function togglePersonalItem(item) {
+    if (busyPersonalItem) return;
+    setBusyPersonalItem(item.id);
+    setPersonalPlanActionError('');
+    try {
+      await updatePersonalPlanStatus(item.id, item.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED');
+      personalPlan.reload();
+    } catch {
+      setPersonalPlanActionError('Could not update this learning-plan task. Please try again.');
+    } finally { setBusyPersonalItem(null); }
   }
 
   return (
@@ -87,6 +102,32 @@ export default function LearnPage() {
           </section>
         );
       })}
+
+      <section className="stack">
+        <SectionHeader title="Your plan for today" subtitle="Built from your roadmap, journal difficulties and recent articles in your saved interests" />
+        {personalPlan.loading && <SkeletonList rows={2} />}
+        {personalPlan.error && <ErrorState message={personalPlan.error} onRetry={personalPlan.reload} />}
+        {personalPlanActionError && <p className="notice error" role="alert">{personalPlanActionError}</p>}
+        {!personalPlan.loading && !personalPlan.error && !personalPlan.data?.length && (
+          <EmptyState title="No grounded action to suggest yet" message="Update roadmap progress, record a difficulty, or choose news interests in Settings to build a plan from your own data." />
+        )}
+        {!!personalPlan.data?.length && ['LEARN', 'PRACTICE', 'STAY_UPDATED'].map((section) => {
+          const items = personalPlan.data.filter((item) => item.section === section);
+          if (!items.length) return null;
+          return <section className="stack tight" key={section}>
+            <h3>{({ LEARN: 'Learn', PRACTICE: 'Practice', STAY_UPDATED: 'Stay updated' })[section]}</h3>
+            {items.map((item) => <article className="card stack tight" key={item.id}>
+              <div className="article-card-top"><span className="pill">{item.generationSource === 'AI' ? 'AI suggestion' : 'Record-based suggestion'}</span><span className="pill">{item.priority} priority</span><span className="muted small">{item.estimatedMinutes} min · due {item.dueDate}</span></div>
+              <h3>{item.title}</h3><p>{item.description}</p><p className="muted small">Why this: {item.rationale}</p>
+              {item.relatedSkill && <p className="muted small">Related skill: {item.relatedSkill}</p>}
+              {item.sourceArticleUrl && <a className="text-link" href={item.sourceArticleUrl} target="_blank" rel="noreferrer">Open the original article</a>}
+              <button type="button" className="button small" disabled={busyPersonalItem === item.id} onClick={() => togglePersonalItem(item)}>
+                {item.status === 'COMPLETED' ? 'Mark pending' : 'Mark complete'}
+              </button>
+            </article>)}
+          </section>;
+        })}
+      </section>
 
       <section>
         <SectionHeader title="Daily learning plan" subtitle="Seven days of short, practical tasks" />

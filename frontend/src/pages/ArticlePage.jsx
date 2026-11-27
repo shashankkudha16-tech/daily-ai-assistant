@@ -99,6 +99,7 @@ export default function ArticlePage() {
 
         <div className="detail-meta">
           <span>{article.source}</span>
+          {article.region && article.region !== 'UNKNOWN' && <span>{article.region === 'INDIA' ? 'India source' : 'Global source'}</span>}
           <span aria-hidden="true">·</span>
           <span>{article.author || 'Author unavailable'}</span>
           <span aria-hidden="true">·</span>

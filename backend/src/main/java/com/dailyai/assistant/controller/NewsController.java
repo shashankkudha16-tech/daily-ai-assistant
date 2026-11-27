@@ -25,9 +25,11 @@ public class NewsController {
     @GetMapping
     public PageResponse<ArticleDto> list(@RequestParam(required = false) String category,
                                          @RequestParam(defaultValue = "newest") String sort,
+                                         @RequestParam(required = false) String region,
+                                         @RequestParam(required = false) String period,
                                          @RequestParam(defaultValue = "0") int page,
                                          @RequestParam(defaultValue = "12") int size) {
-        return articleService.list(category, sort, page, size);
+        return articleService.list(category, region, period, sort, page, size);
     }
 
     @GetMapping("/latest")
@@ -39,9 +41,11 @@ public class NewsController {
     public PageResponse<ArticleDto> search(@RequestParam(name = "q", required = false) String query,
                                            @RequestParam(required = false) String category,
                                            @RequestParam(defaultValue = "newest") String sort,
+                                           @RequestParam(required = false) String region,
+                                           @RequestParam(required = false) String period,
                                            @RequestParam(defaultValue = "0") int page,
                                            @RequestParam(defaultValue = "12") int size) {
-        return articleService.search(query, category, sort, page, size);
+        return articleService.search(query, category, region, period, sort, page, size);
     }
 
     @GetMapping("/category/{category}")

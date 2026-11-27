@@ -20,4 +20,9 @@ public interface AiUsageBudget {
 
     /** Records a failed provider attempt. */
     void recordFailure(LocalDate usageDate);
+
+    /** Records token usage for an unsuccessful but completed provider response. */
+    default void recordFailure(LocalDate usageDate, int inputTokens, int outputTokens) {
+        recordFailure(usageDate);
+    }
 }

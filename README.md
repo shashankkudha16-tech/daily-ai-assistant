@@ -1,8 +1,8 @@
 # Daily AI Updates & Learning Assistant
 
-A mobile-first app for freshers and students: real AI news collected from RSS feeds, a
-beginner-friendly five-level learning roadmap, AI tool discovery, a daily learning plan,
-bookmarks and reading history. The backend is Spring Boot 3 with PostgreSQL; the client is
+A mobile-first app for freshers and students: RSS news, a beginner-friendly learning roadmap,
+a daily progress journal, evidence-linked personal learning plan, optional AI mentor, AI tool
+discovery, bookmarks and reading history. The backend is Spring Boot 3 with PostgreSQL; the client is
 React (JavaScript/CSS/Axios) packaged for Android with Capacitor.
 
 The app runs completely without a paid AI service. When an OpenAI-compatible endpoint is
@@ -18,7 +18,7 @@ React + Vite + Axios (browser / Capacitor Android)
 Spring Boot 3 REST API  ──►  PostgreSQL (Flyway migrations)
       │        │
       │        └──► Optional OpenAI-compatible chat completions API
-      └──► RSS feeds (OpenAI, DeepMind, Google AI, Hugging Face, TechCrunch, arXiv)
+      └──► RSS feeds (OpenAI, DeepMind, Google AI, Hugging Face, TechCrunch, arXiv, PIB)
              fetched by Spring Scheduler every 3 hours (Asia/Kolkata)
 ```
 
@@ -52,7 +52,7 @@ daily-ai-assistant/
 │   │   └── service/       business logic
 │   ├── src/main/resources/
 │   │   ├── application.yml
-│   │   └── db/migration/  V1 schema, V2–V5 seed data
+│   │   └── db/migration/  Additive Flyway migrations V1–V26
 │   └── src/test/java/     unit, MVC and repository tests
 ├── frontend/
 │   ├── src/api/           Axios client and endpoint functions
@@ -69,7 +69,7 @@ daily-ai-assistant/
 
 - Java 17+ and Maven 3.9+
 - Node.js 20+ and npm
-- PostgreSQL 16 (local or Docker)
+- PostgreSQL 16+ (local or Docker; migration verification uses PostgreSQL 18)
 - Optional: Docker Desktop, Android Studio + SDK for the APK
 
 ## 1. Database setup
@@ -122,6 +122,23 @@ by default. For each feed that explicitly permits AI processing in its terms, se
 `allow-ai-content: true` on that feed (or its corresponding `RSS_<FEED>_ALLOW_AI_CONTENT`
 environment variable in `application.yml`). A false or omitted setting falls back to the
 description/excerpt or headline before calling the AI provider.
+
+### Personal growth modules
+
+- **My Progress** stores one account-owned journal entry per date. PDF, DOCX and TXT uploads
+  are validated and converted to bounded plain text; the original uploaded file is not kept.
+- **AI Mentor** runs only after the signed-in user explicitly requests it and confirms that
+  saved learning context may be sent to Groq. It uses bounded history and cites saved evidence;
+  it does not invent skill scores or claim improvement from a single entry.
+- **Your plan for today** stores per-user dated actions from roadmap status, a recorded journal
+  difficulty, and recent news matching saved interests. Each action retains its source topic,
+  journal entry or article. A section stays empty when there is no supporting record.
+- **India / Global** filters describe configured feed-source regions, not an inference about
+  where a story matters. The PIB press-release feed is tagged India; configured international
+  feeds are tagged Global, while older articles remain Unknown. PIB AI-content permission
+  defaults to false.
+- Journal, mentor, career settings and personal plan endpoints require authentication and are
+  scoped to the signed-in account. Existing CSRF protection remains enabled for state changes.
 
 AI explanation output is accepted only when required JSON fields are present and its claims
 can be tied to the selected source. The local factuality check is conservative: it checks whole

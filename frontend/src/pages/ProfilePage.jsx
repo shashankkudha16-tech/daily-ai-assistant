@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getProfile, updateProfileName, updateProfilePreferences } from '../api/api.js';
+import { getProfile, updateProfileCareerContext, updateProfileName, updateProfilePreferences } from '../api/api.js';
 import useAsync from '../hooks/useAsync.js';
-import { EmptyState, ErrorState, SkeletonList } from '../components/States.jsx';
-import { formatDateTime } from '../utils/format.js';
+import { ErrorState, SkeletonList } from '../components/States.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
 
 export default function ProfilePage() {
@@ -17,6 +16,11 @@ export default function ProfilePage() {
   const [preferencesBusy, setPreferencesBusy] = useState(false);
   const [preferencesMessage, setPreferencesMessage] = useState('');
   const [preferencesError, setPreferencesError] = useState('');
+  const [careerGoal, setCareerGoal] = useState('');
+  const [targetRoles, setTargetRoles] = useState('');
+  const [careerBusy, setCareerBusy] = useState(false);
+  const [careerMessage, setCareerMessage] = useState('');
+  const [careerError, setCareerError] = useState('');
 
   const interestOptions = [
     ['AI_ML', 'AI and Machine Learning'],
@@ -36,6 +40,11 @@ export default function ProfilePage() {
   useEffect(() => {
     setPreferences(profile?.preferences || []);
   }, [profile?.preferences]);
+
+  useEffect(() => {
+    setCareerGoal(profile?.careerGoal || '');
+    setTargetRoles(profile?.targetRoles || '');
+  }, [profile?.careerGoal, profile?.targetRoles]);
 
   async function saveName(event) {
     event.preventDefault();
@@ -69,6 +78,22 @@ export default function ProfilePage() {
     }
   }
 
+  async function saveCareer(event) {
+    event.preventDefault();
+    setCareerBusy(true);
+    setCareerMessage('');
+    setCareerError('');
+    try {
+      const updated = await updateProfileCareerContext(careerGoal, targetRoles);
+      setData(updated);
+      setCareerMessage('Career context saved for future mentor guidance.');
+    } catch (err) {
+      setCareerError(err?.response?.data?.message || 'Could not save career context.');
+    } finally {
+      setCareerBusy(false);
+    }
+  }
+
   if (loading) return <SkeletonList rows={4} />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
 
@@ -76,8 +101,8 @@ export default function ProfilePage() {
     <div className="stack">
       <div className="page-title">
         <div>
-          <h1>Profile</h1>
-          <p className="muted">Your learning record is stored in PostgreSQL.</p>
+          <h1>Settings</h1>
+          <p className="muted">Your profile and learning preferences.</p>
         </div>
         <button type="button" className="button ghost small" onClick={signOut}>Log out</button>
       </div>
@@ -153,28 +178,24 @@ export default function ProfilePage() {
         {preferencesError && <p className="notice error" role="alert">{preferencesError}</p>}
       </section>
 
-      <section>
-        <div className="section-header">
-          <h2>Reading history</h2>
-          <span className="muted small">{profile.planProgressPercent}% of daily plan</span>
-        </div>
-        {!profile.history?.length ? (
-          <EmptyState title="No reading history" message="Open an article and it will appear here." />
-        ) : (
-          <div className="stack tight">
-            {profile.history.map((item) => (
-              <article className="card history-card" key={item.id}>
-                <Link to={`/news/${item.articleId}`} className="card-link">
-                  <h3>{item.title}</h3>
-                </Link>
-                <p className="muted small">
-                  {item.source} · read {formatDateTime(item.readAt)}
-                </p>
-              </article>
-            ))}
-          </div>
-        )}
+      <section className="card">
+        <h2>Career direction</h2>
+        <p className="muted">Optional context helps the mentor connect your learning history to your goals.</p>
+        <form className="stack" onSubmit={saveCareer}>
+          <label className="field"><span>Career goal</span><textarea rows={3} maxLength={2000} value={careerGoal} onChange={(event) => setCareerGoal(event.target.value)} placeholder="For example, prepare for a backend developer role" /></label>
+          <label className="field"><span>Target job roles</span><textarea rows={2} maxLength={2000} value={targetRoles} onChange={(event) => setTargetRoles(event.target.value)} placeholder="List roles you are exploring" /></label>
+          <button className="button" type="submit" disabled={careerBusy}>{careerBusy ? 'Saving…' : 'Save career context'}</button>
+        </form>
+        {careerMessage && <p className="notice success" role="status">{careerMessage}</p>}
+        {careerError && <p className="notice error" role="alert">{careerError}</p>}
       </section>
+
+      <section className="card">
+        <h2>Saved items</h2>
+        <p className="muted">Open articles and learning resources you bookmarked.</p>
+        <Link className="button ghost" to="/bookmarks">View bookmarks</Link>
+      </section>
+
     </div>
   );
 }

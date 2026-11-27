@@ -61,14 +61,14 @@ class DatabaseAiUsageBudgetTest {
         budget.tryReserve(day, 10);
 
         budget.recordSuccess(day, 120, 80);
-        budget.recordFailure(day);
+        budget.recordFailure(day, 30, 20);
 
         AiUsageDaily row = repository.findById(day).orElseThrow();
         assertThat(row.getAttempts()).isEqualTo(2);
         assertThat(row.getSuccesses()).isEqualTo(1);
         assertThat(row.getFailures()).isEqualTo(1);
-        assertThat(row.getInputTokens()).isEqualTo(120);
-        assertThat(row.getOutputTokens()).isEqualTo(80);
+        assertThat(row.getInputTokens()).isEqualTo(150);
+        assertThat(row.getOutputTokens()).isEqualTo(100);
     }
 
     @Test

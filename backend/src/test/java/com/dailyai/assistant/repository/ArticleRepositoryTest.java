@@ -48,8 +48,12 @@ class ArticleRepositoryTest {
         Page<Article> byCategory = articleRepository.findByCategorySlug("generative-ai", PageRequest.of(0, 10));
         assertThat(byCategory.getTotalElements()).isEqualTo(1);
 
-        Page<Article> search = articleRepository.search("open weight", PageRequest.of(0, 10));
+        Page<Article> search = articleRepository.findAll(
+                ArticleSpecifications.filters(null, null, null, "open weight"), PageRequest.of(0, 10));
         assertThat(search.getTotalElements()).isEqualTo(1);
+
+        assertThat(articleRepository.findAll(ArticleSpecifications.filters(null, "GLOBAL", null, null),
+                PageRequest.of(0, 10)).getTotalElements()).isZero();
 
         assertThat(articleRepository.countByCategorySlug("generative-ai")).isEqualTo(1);
     }

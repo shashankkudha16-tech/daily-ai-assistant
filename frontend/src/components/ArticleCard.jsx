@@ -7,6 +7,7 @@ export default function ArticleCard({ article, compact = false, showDescription 
     <article className={`card article-card${compact ? ' compact' : ''}`}>
       <div className="article-card-top">
         <span className="pill">{article.categoryName || 'AI news'}</span>
+        {article.region && article.region !== 'UNKNOWN' && <span className="pill muted">{article.region === 'INDIA' ? 'India source' : 'Global source'}</span>}
         <BookmarkToggle
           itemType="ARTICLE"
           itemId={article.id}

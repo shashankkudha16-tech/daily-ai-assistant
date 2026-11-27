@@ -3,6 +3,7 @@ package com.dailyai.assistant.service;
 import com.dailyai.assistant.dto.HistoryDto;
 import com.dailyai.assistant.dto.ProfileDto;
 import com.dailyai.assistant.dto.ProfilePreferencesRequest;
+import com.dailyai.assistant.dto.ProfileCareerRequest;
 import com.dailyai.assistant.dto.RoadmapDto;
 import com.dailyai.assistant.entity.User;
 import com.dailyai.assistant.repository.ReadingHistoryRepository;
@@ -46,7 +47,8 @@ public class ProfileService {
                 roadmap.totalTopics(),
                 learningService.planProgressPercent(),
                 history,
-                user.getPreferences().isBlank() ? List.of() : List.of(user.getPreferences().split(","))
+                user.getPreferences().isBlank() ? List.of() : List.of(user.getPreferences().split(",")),
+                user.getCareerGoal(), user.getTargetRoles()
         );
     }
 
@@ -65,6 +67,14 @@ public class ProfileService {
             throw new com.dailyai.assistant.exception.BadRequestException("Unknown interest preference");
         }
         currentUserService.updatePreferences(String.join(",", selected));
+        return profile();
+    }
+
+    @Transactional
+    public ProfileDto updateCareerContext(ProfileCareerRequest request) {
+        User user = currentUserService.getCurrentUser();
+        user.setCareerGoal(request.careerGoal() == null ? "" : request.careerGoal().trim());
+        user.setTargetRoles(request.targetRoles() == null ? "" : request.targetRoles().trim());
         return profile();
     }
 
